@@ -6,9 +6,11 @@ import org.apache.logging.log4j.Logger;
 import com.inza.twoh.init.InitEntities;
 import com.inza.twoh.init.InitSounds;
 import com.inza.twoh.init.InitStands;
+import com.inza.twoh.network.RealityMarkNetwork;
 
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 
 // Your addon's main file
@@ -22,6 +24,7 @@ public class AddonMain {
 
     public AddonMain() {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
+        modEventBus.addListener(AddonMain::onCommonSetup);
 
         // All DeferredRegister objects are registered here.
         // A DeferredRegister needs to be created for each type of objects that need to be registered in the game 
@@ -30,5 +33,9 @@ public class AddonMain {
         InitSounds.SOUNDS.register(modEventBus);
         InitStands.ACTIONS.register(modEventBus);
         InitStands.STANDS.register(modEventBus);
+    }
+
+    private static void onCommonSetup(FMLCommonSetupEvent event) {
+        RealityMarkNetwork.register();
     }
 }

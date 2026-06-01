@@ -4,12 +4,12 @@ import com.github.standobyte.jojo.client.render.entity.model.stand.StandEntityMo
 import com.github.standobyte.jojo.client.render.entity.model.stand.StandModelRegistry;
 import com.github.standobyte.jojo.client.render.entity.renderer.stand.StandEntityRenderer;
 import com.inza.twoh.AddonMain;
-import com.inza.twoh.entity.ExampleStandEntity;
+import com.inza.twoh.entity.TheWorldOverHavenStandEntity;
 
 import net.minecraft.client.renderer.entity.EntityRendererManager;
 import net.minecraft.util.ResourceLocation;
 
-public class TheWorldOverHavenStandRenderer extends StandEntityRenderer<ExampleStandEntity, StandEntityModel<ExampleStandEntity>> {
+public class TheWorldOverHavenStandRenderer extends StandEntityRenderer<TheWorldOverHavenStandEntity, StandEntityModel<TheWorldOverHavenStandEntity>> {
     
     public TheWorldOverHavenStandRenderer(EntityRendererManager renderManager) {
         super(renderManager, 

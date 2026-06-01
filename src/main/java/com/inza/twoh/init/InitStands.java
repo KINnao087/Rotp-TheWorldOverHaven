@@ -14,8 +14,8 @@ import com.github.standobyte.jojo.power.impl.stand.stats.StandStats;
 import com.github.standobyte.jojo.power.impl.stand.type.EntityStandType;
 import com.github.standobyte.jojo.power.impl.stand.type.StandType;
 import com.inza.twoh.AddonMain;
-import com.inza.twoh.action.ExampleStandThrowPickaxe;
-import com.inza.twoh.entity.ExampleStandEntity;
+import com.inza.twoh.action.TWOHLightPunch;
+import com.inza.twoh.entity.TheWorldOverHavenStandEntity;
 
 import net.minecraftforge.fml.RegistryObject;
 import net.minecraftforge.registries.DeferredRegister;
@@ -32,8 +32,8 @@ public class InitStands {
     
     
     // Create all the abilities here...
-    public static final RegistryObject<StandEntityAction> EXAMPLE_STAND_PUNCH = ACTIONS.register("example_stand_punch", 
-            () -> new StandEntityLightAttack(new StandEntityLightAttack.Builder()
+    public static final RegistryObject<TWOHLightPunch> TWOH_STAND_PUNCH = ACTIONS.register("twoh_stand_punch",
+            () -> new TWOHLightPunch(new TWOHLightPunch.Builder()
                     .punchSound(InitSounds.EXAMPLE_STAND_PUNCH_LIGHT)));
     
     public static final RegistryObject<StandEntityAction> EXAMPLE_STAND_BARRAGE = ACTIONS.register("example_stand_barrage", 
@@ -47,7 +47,7 @@ public class InitStands {
 
     public static final RegistryObject<StandEntityHeavyAttack> EXAMPLE_STAND_HEAVY_PUNCH = ACTIONS.register("example_stand_heavy_punch", 
             () -> new StandEntityHeavyAttack(new StandEntityHeavyAttack.Builder()
-                    .shiftVariationOf(EXAMPLE_STAND_PUNCH).shiftVariationOf(EXAMPLE_STAND_BARRAGE)
+                    .shiftVariationOf(TWOH_STAND_PUNCH).shiftVariationOf(EXAMPLE_STAND_BARRAGE)
                     .setFinisherVariation(EXAMPLE_STAND_FINISHER_PUNCH)
                     .punchSound(InitSounds.EXAMPLE_STAND_PUNCH_HEAVY)
                     .partsRequired(StandPart.ARMS)));
@@ -55,31 +55,20 @@ public class InitStands {
     public static final RegistryObject<StandEntityAction> EXAMPLE_STAND_BLOCK = ACTIONS.register("example_stand_block", 
             () -> new StandEntityBlock());
     
-    public static final RegistryObject<StandEntityAction> EXAMPLE_STAND_THROW_PICKAXE = ACTIONS.register("example_stand_throw_pickaxe", 
-            () -> new ExampleStandThrowPickaxe(new StandEntityAction.Builder()
-                    .standPose(ExampleStandThrowPickaxe.PICKAXE_THROW_ANIM)
-                    .holdToFire(20, true)
-                    .standRecoveryTicks(20)
-                    .standSound(InitSounds.EXAMPLE_STAND_THROW_PICKAXE)
-                    .staminaCost(75)
-                    .partsRequired(StandPart.ARMS)));
-    
-    
 
     // ...then create the Stand type instance. Moves, stats, entity sizes, and a few other things are determined here.
-    public static final EntityStandRegistryObject<EntityStandType<StandStats>, StandEntityType<ExampleStandEntity>> STAND_EXAMPLE_STAND = 
-            new EntityStandRegistryObject<>("example_stand", 
+    public static final EntityStandRegistryObject<EntityStandType<StandStats>, StandEntityType<TheWorldOverHavenStandEntity>> STAND_EXAMPLE_STAND =
+            new EntityStandRegistryObject<>("the_world_over_haven_stand",
                     STANDS, 
                     () -> new EntityStandType.Builder<StandStats>()
                     .color(0x00AFAF)
                     .storyPartName(ModStandsInit.PART_3_NAME)
                     .leftClickHotbar(
-                            EXAMPLE_STAND_PUNCH.get(),
+                            TWOH_STAND_PUNCH.get(),
                             EXAMPLE_STAND_BARRAGE.get()
                             )
                     .rightClickHotbar(
-                            EXAMPLE_STAND_BLOCK.get(),
-                            EXAMPLE_STAND_THROW_PICKAXE.get()
+                            EXAMPLE_STAND_BLOCK.get()
                             )
                     .defaultStats(StandStats.class, new StandStats.Builder()
                             .tier(6)
@@ -94,7 +83,7 @@ public class InitStands {
                     .build(),
                     
                     InitEntities.ENTITIES,
-                    () -> new StandEntityType<ExampleStandEntity>(ExampleStandEntity::new, 0.7F, 2.1F)
+                    () -> new StandEntityType<TheWorldOverHavenStandEntity>(TheWorldOverHavenStandEntity::new, 0.7F, 2.1F)
                     .summonSound(InitSounds.EXAMPLE_STAND_SUMMON_SOUND)
                     .unsummonSound(InitSounds.EXAMPLE_STAND_UNSUMMON_SOUND))
             .withDefaultStandAttributes();

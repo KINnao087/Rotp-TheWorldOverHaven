@@ -8,11 +8,11 @@ import net.minecraft.network.datasync.DataSerializers;
 import net.minecraft.network.datasync.EntityDataManager;
 import net.minecraft.world.World;
 
-public class ExampleStandEntity extends StandEntity {
+public class TheWorldOverHavenStandEntity extends StandEntity {
     private static final DataParameter<Boolean> HAS_PICKAXE = 
-            EntityDataManager.defineId(ExampleStandEntity.class, DataSerializers.BOOLEAN);
+            EntityDataManager.defineId(TheWorldOverHavenStandEntity.class, DataSerializers.BOOLEAN);
 
-    public ExampleStandEntity(StandEntityType<ExampleStandEntity> type, World world) {
+    public TheWorldOverHavenStandEntity(StandEntityType<TheWorldOverHavenStandEntity> type, World world) {
         super(type, world);
     }
 
@@ -21,7 +21,7 @@ public class ExampleStandEntity extends StandEntity {
         super.defineSynchedData();
         entityData.define(HAS_PICKAXE, false);
     }
-    
+
     public boolean hasPickaxe() {
         return entityData.get(HAS_PICKAXE);
     }
