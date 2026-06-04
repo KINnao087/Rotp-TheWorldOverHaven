@@ -1,11 +1,6 @@
 package com.inza.twoh.init;
 
 import com.github.standobyte.jojo.action.Action;
-import com.github.standobyte.jojo.action.stand.StandEntityAction;
-import com.github.standobyte.jojo.action.stand.StandEntityBlock;
-import com.github.standobyte.jojo.action.stand.StandEntityHeavyAttack;
-import com.github.standobyte.jojo.action.stand.StandEntityLightAttack;
-import com.github.standobyte.jojo.action.stand.StandEntityMeleeBarrage;
 import com.github.standobyte.jojo.entity.stand.StandEntityType;
 import com.github.standobyte.jojo.init.power.stand.EntityStandRegistryObject;
 import com.github.standobyte.jojo.init.power.stand.ModStandsInit;
@@ -14,6 +9,10 @@ import com.github.standobyte.jojo.power.impl.stand.stats.StandStats;
 import com.github.standobyte.jojo.power.impl.stand.type.EntityStandType;
 import com.github.standobyte.jojo.power.impl.stand.type.StandType;
 import com.inza.twoh.AddonMain;
+import com.inza.twoh.action.TWOHBarrage;
+import com.inza.twoh.action.TWOHBlock;
+import com.inza.twoh.action.TWOHFinisherPunch;
+import com.inza.twoh.action.TWOHHeavyPunch;
 import com.inza.twoh.action.TWOHLightPunch;
 import com.inza.twoh.entity.TheWorldOverHavenStandEntity;
 
@@ -36,24 +35,24 @@ public class InitStands {
             () -> new TWOHLightPunch(new TWOHLightPunch.Builder()
                     .punchSound(InitSounds.EXAMPLE_STAND_PUNCH_LIGHT)));
     
-    public static final RegistryObject<StandEntityAction> EXAMPLE_STAND_BARRAGE = ACTIONS.register("example_stand_barrage", 
-            () -> new StandEntityMeleeBarrage(new StandEntityMeleeBarrage.Builder()
+    public static final RegistryObject<TWOHBarrage> TWOH_STAND_BARRAGE = ACTIONS.register("example_stand_barrage", 
+            () -> new TWOHBarrage(new TWOHBarrage.Builder()
                     .barrageHitSound(InitSounds.EXAMPLE_STAND_PUNCH_BARRAGE)));
 
-    public static final RegistryObject<StandEntityHeavyAttack> EXAMPLE_STAND_FINISHER_PUNCH = ACTIONS.register("example_stand_finisher_punch", 
-            () -> new StandEntityHeavyAttack(new StandEntityHeavyAttack.Builder() // TODO finisher ability
+    public static final RegistryObject<TWOHFinisherPunch> TWOH_STAND_FINISHER_PUNCH = ACTIONS.register("example_stand_finisher_punch", 
+            () -> new TWOHFinisherPunch(new TWOHFinisherPunch.Builder() // TODO finisher ability
                     .punchSound(InitSounds.EXAMPLE_STAND_PUNCH_HEAVY)
                     .partsRequired(StandPart.ARMS)));
 
-    public static final RegistryObject<StandEntityHeavyAttack> EXAMPLE_STAND_HEAVY_PUNCH = ACTIONS.register("example_stand_heavy_punch", 
-            () -> new StandEntityHeavyAttack(new StandEntityHeavyAttack.Builder()
-                    .shiftVariationOf(TWOH_STAND_PUNCH).shiftVariationOf(EXAMPLE_STAND_BARRAGE)
-                    .setFinisherVariation(EXAMPLE_STAND_FINISHER_PUNCH)
+    public static final RegistryObject<TWOHHeavyPunch> TWOH_STAND_HEAVY_PUNCH = ACTIONS.register("example_stand_heavy_punch", 
+            () -> new TWOHHeavyPunch(new TWOHHeavyPunch.Builder()
+                    .shiftVariationOf(TWOH_STAND_PUNCH).shiftVariationOf(TWOH_STAND_BARRAGE)
+                    .setFinisherVariation(TWOH_STAND_FINISHER_PUNCH)
                     .punchSound(InitSounds.EXAMPLE_STAND_PUNCH_HEAVY)
                     .partsRequired(StandPart.ARMS)));
     
-    public static final RegistryObject<StandEntityAction> EXAMPLE_STAND_BLOCK = ACTIONS.register("example_stand_block", 
-            () -> new StandEntityBlock());
+    public static final RegistryObject<TWOHBlock> TWOH_STAND_BLOCK = ACTIONS.register("example_stand_block", 
+            () -> new TWOHBlock());
     
 
     // ...then create the Stand type instance. Moves, stats, entity sizes, and a few other things are determined here.
@@ -65,10 +64,10 @@ public class InitStands {
                     .storyPartName(ModStandsInit.PART_3_NAME)
                     .leftClickHotbar(
                             TWOH_STAND_PUNCH.get(),
-                            EXAMPLE_STAND_BARRAGE.get()
+                            TWOH_STAND_BARRAGE.get()
                             )
                     .rightClickHotbar(
-                            EXAMPLE_STAND_BLOCK.get()
+                            TWOH_STAND_BLOCK.get()
                             )
                     .defaultStats(StandStats.class, new StandStats.Builder()
                             .tier(6)
