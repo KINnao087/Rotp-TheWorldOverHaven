@@ -7,7 +7,7 @@
       "layers": [
         {
           "height": 1,
-          "block": "minecraft:black_concrete"
+          "block": "twohaddon:over_heaven_floor"
         }
       ],
       "structures": {

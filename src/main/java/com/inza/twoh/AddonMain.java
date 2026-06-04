@@ -1,5 +1,6 @@
 package com.inza.twoh;
 
+import com.inza.twoh.init.InitBlock;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -33,6 +34,8 @@ public class AddonMain {
         InitSounds.SOUNDS.register(modEventBus);
         InitStands.ACTIONS.register(modEventBus);
         InitStands.STANDS.register(modEventBus);
+        InitBlock.BLOCKS.register(modEventBus);
+        InitBlock.ITEMS.register(modEventBus);
     }
 
     private static void onCommonSetup(FMLCommonSetupEvent event) {
