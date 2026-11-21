@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_8",
   "refmap": "twohaddon.refmap.json",
   "mixins": [
+    "CommandSourceMixin"
   ],
   "client": [
     "client.RenderTypeMixin",

@@ -21,6 +21,12 @@ archivesBaseName = 'RotP-TheWorldOverHaven'
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(8) // Mojang ships Java 8 to end users, so your mod should target Java 8.
 
+// EN: Read Java sources as UTF-8 regardless of the host's default encoding.
+// 中文：始终以 UTF-8 读取 Java 源码，避免系统默认编码导致界面文字乱码。
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
 println('Java: ' + System.getProperty('java.version') + ' JVM: ' + System.getProperty('java.vm.version') + '(' + System.getProperty('java.vendor') + ') Arch: ' + System.getProperty('os.arch'))
 minecraft {
     // The mappings can be changed at any time, and must be in the following format.

@@ -8,6 +8,8 @@ import com.inza.twoh.init.InitEntities;
 import com.inza.twoh.init.InitSounds;
 import com.inza.twoh.init.InitStands;
 import com.inza.twoh.network.RealityMarkNetwork;
+import com.inza.twoh.command.agent.config.ConfigNetwork;
+import com.inza.twoh.command.agent.chat.ChatNetwork;
 
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
@@ -40,5 +42,7 @@ public class AddonMain {
 
     private static void onCommonSetup(FMLCommonSetupEvent event) {
         RealityMarkNetwork.register();
+        ConfigNetwork.register();
+        ChatNetwork.register();
     }
 }

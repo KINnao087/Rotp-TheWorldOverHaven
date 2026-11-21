@@ -1,204 +1,229 @@
 package com.inza.twoh.command;
 
 import com.inza.twoh.AddonMain;
+import com.inza.twoh.command.agent.AgentRunner;
+import com.inza.twoh.command.agent.AgentStrings;
+import com.inza.twoh.command.agent.AgentStrings.Command;
+import com.inza.twoh.command.agent.AgentStrings.Text;
 import com.inza.twoh.command.agent.ChatApi;
-import com.inza.twoh.command.agent.ModelCommand;
+import com.inza.twoh.command.agent.chat.ChatMemory;
+import com.inza.twoh.command.agent.chat.ChatNetwork;
+import com.inza.twoh.command.agent.chat.ChatText;
+import com.inza.twoh.command.agent.config.ConfigText;
+import com.inza.twoh.command.agent.config.ModelRuntime;
+import com.inza.twoh.command.agent.config.ServerModels;
+import com.inza.twoh.command.agent.config.ConfigNetwork;
+import com.inza.twoh.command.agent.CommandExecutor;
+import com.inza.twoh.command.agent.GetPlayerContextTool;
+import com.google.gson.JsonObject;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
-import java.io.IOException;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Optional;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Executors;
 
 import net.minecraft.command.CommandSource;
 import net.minecraft.command.Commands;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.MobEntity;
 import net.minecraft.entity.player.ServerPlayerEntity;
-import net.minecraft.entity.projectile.ProjectileHelper;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.nbt.CompoundNBT;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.math.EntityRayTraceResult;
-import net.minecraft.util.math.RayTraceResult;
-import net.minecraft.util.math.vector.Vector3d;
 import net.minecraft.util.text.StringTextComponent;
 import net.minecraft.world.server.ServerWorld;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.fml.event.server.FMLServerStoppedEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-/** /twoh agent 的入口：主线程捕获目标，后台翻译，再回主线程执行。 */
+/**
+ * EN: Accept an operator's request without collecting any subject's state in advance.
+ * 中文：接收有权限玩家的请求，不预先采集任何查询对象的状态。
+ */
 @Mod.EventBusSubscriber(modid = AddonMain.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class MiniAgentCommand {
-    private static final int PERMISSION_LEVEL = 2;
-    private static final int TARGET_RANGE = 16;
-    private static final int MAX_REQUEST_LENGTH = 256;
-    private static final Set<UUID> BUSY = ConcurrentHashMap.newKeySet();
+    private static final Map<MinecraftServer, AgentRunner> RUNNERS = new IdentityHashMap<>();
+    private static final ExecutorService WORKERS = Executors.newFixedThreadPool(2, task -> {
+        Thread thread = new Thread(task, AgentStrings.WORKER_NAME);
+        thread.setDaemon(true);
+        return thread;
+    });
 
-    // 不排队：两个工作线程都忙时立即提示玩家，避免请求排到目标已经失效。
-    private static final ExecutorService IO = new ThreadPoolExecutor(
-            0, 2, 30, TimeUnit.SECONDS, new SynchronousQueue<>(),
-            task -> {
-                Thread thread = new Thread(task, "TWOH-model");
-                thread.setDaemon(true);
-                return thread;
-            });
+    private MiniAgentCommand() {
+    }
 
     @SubscribeEvent
     public static void register(RegisterCommandsEvent event) {
-        event.getDispatcher().register(Commands.literal("twoh")
-                .then(Commands.literal("agent")
-                        .requires(source -> source.hasPermission(PERMISSION_LEVEL))
-                        .then(Commands.argument("request", StringArgumentType.greedyString())
+        event.getDispatcher().register(Commands.literal(Command.ROOT)
+                .then(Commands.literal(Command.AGENT)
+                        .requires(source -> source.hasPermission(CommandExecutor.PERMISSION_LEVEL))
+                        .executes(context -> openChat(context.getSource().getPlayerOrException()))
+                        .then(Commands.literal(ChatText.CHAT)
+                                .executes(context -> openChat(context.getSource().getPlayerOrException())))
+                        .then(Commands.literal(ConfigText.COMMAND)
+                                .requires(source -> source.hasPermission(ConfigText.ADMIN_LEVEL))
+                                .executes(context -> ConfigNetwork.open(context.getSource().getPlayerOrException())))
+                        .then(Commands.argument(Command.REQUEST_ARGUMENT, StringArgumentType.greedyString())
                                 .executes(MiniAgentCommand::request))));
     }
 
-    private static int request(CommandContext<CommandSource> context) throws CommandSyntaxException {
-        CommandSource source = context.getSource();
-        ServerPlayerEntity player = source.getPlayerOrException();
-        String text = StringArgumentType.getString(context, "request");
-        if (text.trim().isEmpty() || text.length() > MAX_REQUEST_LENGTH) {
-            tell(source, "请求须为 1–256 个字符。");
-            return 0;
-        }
+    private static int request(CommandContext<CommandSource> context)
+            throws CommandSyntaxException {
+        return request(context.getSource().getPlayerOrException(),
+                StringArgumentType.getString(context, Command.REQUEST_ARGUMENT), false);
+    }
 
-        // 在发话时锁定 UUID；即使玩家随后转头，也不能更换这条命令的目标。
-        Entity entity = aimedTarget(player);
-        UUID target = entity == null ? null : entity.getUUID();
-        String type = entity == null ? null : entity.getType().getRegistryName().toString();
-        Request request = new Request(source, player, target);
-        if (!BUSY.add(request.playerId)) {
-            tell(source, "上一条请求尚未完成。");
-            return 0;
-        }
+    private static AgentRunner runner(ServerPlayerEntity player) {
+        return RUNNERS.computeIfAbsent(player.getServer(), server -> new AgentRunner(WORKERS));
+    }
 
-        try {
-            IO.execute(() -> translate(request, text, type));
-        } catch (RejectedExecutionException busy) {
-            BUSY.remove(request.playerId);
-            tell(source, "模型正忙，请稍后重试。");
-            return 0;
+    private static ChatMemory memory(ServerPlayerEntity player) {
+        ChatMemory memory = runner(player).memory(player.getUUID());
+        CompoundNBT preferences = player.getPersistentData().getCompound(PlayerEntity.PERSISTED_NBT_TAG)
+                .getCompound(ChatText.SETTINGS);
+        if (preferences.contains(ChatText.WINDOW)) {
+            memory.configure(preferences.getBoolean(ChatText.SUMMARY), preferences.getInt(ChatText.WINDOW));
         }
+        return memory;
+    }
 
-        tell(source, "正在解析请求……");
+    private static int openChat(ServerPlayerEntity player) {
+        ChatMemory chat = memory(player);
+        chat.watch(true);
+        ChatNetwork.show(player, chat.view(), true);
         return 1;
     }
 
-    private static Entity aimedTarget(ServerPlayerEntity player) {
-        Vector3d eye = player.getEyePosition(1);
-        Vector3d direction = player.getViewVector(1).scale(TARGET_RANGE);
-        RayTraceResult wall = player.pick(TARGET_RANGE, 1, false);
-        double distanceSquared = wall.getType() == RayTraceResult.Type.MISS
-                ? TARGET_RANGE * TARGET_RANGE
-                : eye.distanceToSqr(wall.getLocation());
-
-        // 射线在最近的方块处截止；挡在前面的非生物实体也不能被穿透。
-        EntityRayTraceResult hit = ProjectileHelper.getEntityHitResult(
-                player, eye, eye.add(direction), player.getBoundingBox().expandTowards(direction).inflate(1),
-                entity -> !entity.isSpectator() && entity.isPickable(), distanceSquared);
-        if (hit == null || !(hit.getEntity() instanceof MobEntity)
-                || eye.distanceToSqr(hit.getLocation()) > distanceSquared) {
-            return null;
-        }
-        return hit.getEntity();
+    public static void closeChat(ServerPlayerEntity player) {
+        runner(player).memory(player.getUUID()).watch(false);
     }
 
-    /** 模型线程只消费发话时的快照，不在此处读取实体或修改世界。 */
-    private static void translate(Request request, String text, String type) {
-        String command = null;
-        String failure = null;
-        try {
-            String target = request.target == null ? null : request.target.toString();
-            String content = ChatApi.translate(text, target, type);
-            command = ModelCommand.parse(content, request.target);
-        } catch (IOException exception) {
-            String reason = exception.getMessage();
-            boolean userFacing = reason != null && (reason.startsWith("请先") || reason.startsWith("模型 API 返回 HTTP"));
-            failure = userFacing ? reason : "模型连接失败或超时；未执行。";
-        } catch (RuntimeException exception) {
-            failure = "模型返回了无效格式或未授权命令；未执行。";
+    public static void configureChat(ServerPlayerEntity player, boolean summary, int window) {
+        ChatMemory memory = memory(player);
+        if (memory.configure(summary, window)) {
+            // EN: Persist preferences across respawns, not the player's private transcript.
+            // 中文：偏好设置跨重生保留，私人对话正文不写入存档。
+            CompoundNBT preferences = new CompoundNBT();
+            preferences.putBoolean(ChatText.SUMMARY, summary);
+            preferences.putInt(ChatText.WINDOW, window);
+            CompoundNBT persisted = player.getPersistentData().getCompound(PlayerEntity.PERSISTED_NBT_TAG);
+            persisted.put(ChatText.SETTINGS, preferences);
+            player.getPersistentData().put(PlayerEntity.PERSISTED_NBT_TAG, persisted);
         }
-
-        final String parsedCommand = command;
-        final String errorMessage = failure;
-        try {
-            request.server.execute(() -> execute(request, parsedCommand, errorMessage));
-        } catch (RuntimeException schedulingFailure) {
-            // 主线程未接收任务，不能依赖执行回调释放该玩家的占用标记。
-            BUSY.remove(request.playerId);
-        }
+        ChatNetwork.show(player, memory.view(), false);
     }
 
-    /** 返回主线程后重新核验状态；推理期间玩家可能退出、切换维度或失去权限。 */
-    private static void execute(Request request, String command, String failure) {
-        try {
-            ServerPlayerEntity player = request.player;
-            if (request.server.getPlayerList().getPlayer(request.playerId) != player) {
-                return;
-            }
+    public static int request(ServerPlayerEntity player, String text, boolean fromScreen) {
+        if (!player.createCommandSourceStack().hasPermission(CommandExecutor.PERMISSION_LEVEL)) {
+            return 0;
+        }
+        ChatMemory memory = memory(player);
+        PlayerSession game = new PlayerSession(player.getServer(), player, memory, fromScreen);
+        if (text.trim().isEmpty() || text.length() > ChatText.MAX_REQUEST
+                || text.chars().anyMatch(Character::isISOControl)) {
+            game.tell(Text.INVALID_LENGTH);
+            return 0;
+        }
+        ModelRuntime runtime = ServerModels.get(player.getServer());
+        ChatApi client = runtime == null ? null : runtime.client();
+        if (client == null) {
+            game.tell(runtime == null ? ConfigText.STORAGE_ERROR : Text.CONFIG_REQUIRED);
+            return 0;
+        }
+        return runner(player).start(player.getUUID(), player.getGameProfile().getName(), text, game,
+                client, game::refresh) ? 1 : 0;
+    }
 
-            CommandSource source = player.createCommandSourceStack();
-            if (player.getLevel() != request.world || !source.hasPermission(PERMISSION_LEVEL) || !player.isAlive()) {
-                tell(source, "玩家状态或权限已变化；未执行。");
-                return;
-            }
-            if (failure != null) {
-                tell(source, failure);
-                return;
-            }
-            if (command == null) {
-                tell(source, "无法确定单条受支持的指令或目标；未执行。");
-                return;
-            }
-            if (command.startsWith("kill ") && !isTargetValid(request)) {
-                tell(source, "原目标失效、超距或已被遮挡；未执行。");
-                return;
-            }
-
-            // 使用玩家当前的命令源，不借用控制台权限。
-            request.server.getCommands().getDispatcher().execute(command, source);
-            tell(source, "已执行 /" + command);
-        } catch (CommandSyntaxException exception) {
-            tell(request.source, "游戏拒绝执行：" + exception.getRawMessage().getString());
-        } finally {
-            BUSY.remove(request.playerId);
+    @SubscribeEvent
+    public static void logout(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (!(event.getPlayer() instanceof ServerPlayerEntity)) {
+            return;
+        }
+        AgentRunner runner = RUNNERS.get(event.getPlayer().getServer());
+        if (runner != null) {
+            runner.forget(event.getPlayer().getUUID());
         }
     }
 
-    private static boolean isTargetValid(Request request) {
-        Entity entity = request.world.getEntity(request.target);
-        return entity instanceof MobEntity
-                && entity.isAlive()
-                && request.player.distanceToSqr(entity) <= TARGET_RANGE * TARGET_RANGE
-                && request.player.canSee(entity);
+    @SubscribeEvent
+    public static void stop(FMLServerStoppedEvent event) {
+        RUNNERS.remove(event.getServer());
     }
 
-    private static void tell(CommandSource source, String message) {
-        source.sendSuccess(new StringTextComponent("[TWOH] " + message), false);
-    }
+    /**
+     * EN: Keep issuer identity separate from the player named in a tool call.
+     * 中文：发起者决定权限及命令来源，工具参数里的玩家名仅决定查询对象。
+     */
+    private static final class PlayerSession implements AgentRunner.Game {
+        private final MinecraftServer server;
+        private final ServerPlayerEntity issuer;
+        private final ServerWorld initialWorld;
+        private final ChatMemory memory;
+        private final boolean fromScreen;
 
-    /** 从主线程捕获的请求上下文。游戏对象引用仅供回到主线程后使用。 */
-    private static final class Request {
-        final CommandSource source;
-        final MinecraftServer server;
-        final ServerPlayerEntity player;
-        final ServerWorld world;
-        final UUID playerId;
-        final UUID target;
+        PlayerSession(MinecraftServer server, ServerPlayerEntity issuer, ChatMemory memory, boolean fromScreen) {
+            this.server = server;
+            this.issuer = issuer;
+            this.initialWorld = issuer.getLevel();
+            this.memory = memory;
+            this.fromScreen = fromScreen;
+        }
 
-        Request(CommandSource source, ServerPlayerEntity player, UUID target) {
-            this.source = source;
-            this.server = source.getServer();
-            this.player = player;
-            this.world = player.getLevel();
-            this.playerId = player.getUUID();
-            this.target = target;
+        @Override
+        public void onServerThread(Runnable task) {
+            server.execute(task);
+        }
+
+        @Override
+        public boolean isCurrent() {
+            if (server.getPlayerList().getPlayer(issuer.getUUID()) != issuer) {
+                return false;
+            }
+            if (!issuer.isAlive() || issuer.getLevel() != initialWorld
+                    || !issuer.createCommandSourceStack().hasPermission(CommandExecutor.PERMISSION_LEVEL)) {
+                tell(Text.PLAYER_CHANGED);
+                notifyCompletion(Text.PLAYER_CHANGED);
+                return false;
+            }
+            return true;
+        }
+
+        @Override
+        public JsonObject lookup(String playerName) {
+            return GetPlayerContextTool.lookup(server, playerName);
+        }
+
+        @Override
+        public Optional<String> submit(String command) {
+            return CommandExecutor.submit(server, issuer, command);
+        }
+
+        @Override
+        public void tell(String message) {
+            memory.notice(Text.PARSING.equals(message) ? "" : message);
+            if (!fromScreen) {
+                issuer.createCommandSourceStack().sendSuccess(new StringTextComponent(Text.CHAT_PREFIX + message), false);
+            }
+            refresh();
+        }
+
+        @Override
+        public void notifyCompletion(String message) {
+            // EN: The client decides whether the chat is visible when this message actually arrives.
+            // 中文：是否弹窗由客户端在消息到达时判断，不依赖可能滞后的窗口订阅状态。
+            if (server.getPlayerList().getPlayer(issuer.getUUID()) == issuer) {
+                ChatNetwork.completed(issuer, message);
+            }
+        }
+
+        private void refresh() {
+            if (memory.watching() && server.getPlayerList().getPlayer(issuer.getUUID()) == issuer) {
+                ChatNetwork.show(issuer, memory.view(), false);
+            }
         }
     }
 }
