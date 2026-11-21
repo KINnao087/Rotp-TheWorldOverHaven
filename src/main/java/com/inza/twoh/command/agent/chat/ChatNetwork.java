@@ -30,7 +30,7 @@ import java.util.function.Supplier;
  * 中文：客户端只提交新消息或设置；玩家身份、历史和凭据由服务端掌管。
  */
 public final class ChatNetwork {
-    private static final String VERSION = "3";
+    private static final String VERSION = "4";
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(AddonMain.MOD_ID, ChatText.CHANNEL), () -> VERSION,
             VERSION::equals, VERSION::equals);
@@ -45,10 +45,72 @@ public final class ChatNetwork {
                 Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(2, Completion.class, Completion::write, Completion::read, Completion::receive,
                 Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(3, HistoryAction.class, HistoryAction::write, HistoryAction::read, HistoryAction::receive,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
     }
 
     public static void send(String request) {
         CHANNEL.sendToServer(new Action(Operation.SEND, request, false, 0));
+    }
+
+    public enum HistoryOp {
+        PAGE, SWITCH, EDIT, DELETE, RESEND, CONTINUE
+    }
+
+    public static void history(HistoryOp operation, long revision, int index, boolean assistant, String text) {
+        CHANNEL.sendToServer(new HistoryAction(operation, revision, index, assistant, text));
+    }
+
+    private static final class HistoryAction {
+        final HistoryOp operation;
+        final long revision;
+        final int index;
+        final boolean assistant;
+        final String text;
+
+        HistoryAction(HistoryOp operation, long revision, int index, boolean assistant, String text) {
+            this.operation = operation;
+            this.revision = revision;
+            this.index = index;
+            this.assistant = assistant;
+            this.text = text;
+        }
+
+        void write(PacketBuffer buffer) {
+            buffer.writeEnum(operation);
+            buffer.writeLong(revision);
+            buffer.writeVarInt(index);
+            buffer.writeBoolean(assistant);
+            if (operation == HistoryOp.EDIT || operation == HistoryOp.RESEND) {
+                buffer.writeUtf(text);
+            }
+        }
+
+        static HistoryAction read(PacketBuffer buffer) {
+            HistoryOp operation = buffer.readEnum(HistoryOp.class);
+            long revision = buffer.readLong();
+            int index = buffer.readVarInt();
+            boolean assistant = buffer.readBoolean();
+            String text = operation == HistoryOp.EDIT || operation == HistoryOp.RESEND
+                    ? buffer.readUtf(assistant && operation == HistoryOp.EDIT ? ChatText.MAX_REPLY : ChatText.MAX_REQUEST) : "";
+            return new HistoryAction(operation, revision, index, assistant, text);
+        }
+
+        static void receive(HistoryAction packet, Supplier<NetworkEvent.Context> context) {
+            NetworkEvent.Context ctx = context.get();
+            ServerPlayerEntity player = ctx.getSender();
+            ctx.enqueueWork(() -> {
+                if (player == null || player.getServer().getPlayerList().getPlayer(player.getUUID()) != player) {
+                    return;
+                }
+                if (!player.createCommandSourceStack().hasPermission(CommandExecutor.PERMISSION_LEVEL)) {
+                    show(player, new ChatView(false, 0, 0, "", Collections.emptyList(), "", Text.PLAYER_CHANGED), false);
+                    return;
+                }
+                MiniAgentCommand.history(player, packet.operation, packet.revision, packet.index, packet.assistant, packet.text);
+            });
+            ctx.setPacketHandled(true);
+        }
     }
 
     public static void configure(boolean summarize, int window) {
@@ -168,6 +230,11 @@ public final class ChatNetwork {
             buffer.writeBoolean(view.summarize);
             buffer.writeVarInt(view.window);
             buffer.writeVarInt(view.maxWindow);
+            buffer.writeLong(view.revision);
+            buffer.writeVarInt(view.first);
+            buffer.writeVarInt(view.total);
+            buffer.writeVarInt(view.branch);
+            buffer.writeVarInt(view.branchCount);
             buffer.writeUtf(view.summary);
             buffer.writeVarInt(view.turns.size());
             for (ChatTurn turn : view.turns) {
@@ -183,9 +250,15 @@ public final class ChatNetwork {
             boolean summarize = buffer.readBoolean();
             int window = buffer.readVarInt();
             int maxWindow = buffer.readVarInt();
+            long revision = buffer.readLong();
+            int first = buffer.readVarInt();
+            int total = buffer.readVarInt();
+            int branch = buffer.readVarInt();
+            int branchCount = buffer.readVarInt();
             String summary = buffer.readUtf(ChatText.MAX_SUMMARY);
             int count = buffer.readVarInt();
-            if (window < 0 || window > maxWindow || count < 0 || count > ChatText.DISPLAY_TURNS) {
+            if (window < 0 || window > maxWindow || count < 0 || count > ChatText.DISPLAY_TURNS
+                    || first < 0 || total < first || count > total - first || branch < 0 || branch >= branchCount) {
                 throw new IllegalArgumentException(ChatText.LIMIT);
             }
             List<ChatTurn> turns = new ArrayList<>(count);
@@ -194,7 +267,8 @@ public final class ChatNetwork {
             }
             String pending = buffer.readUtf(ChatText.MAX_REQUEST);
             String notice = buffer.readUtf(ChatText.MAX_REPLY);
-            return new Snapshot(new ChatView(summarize, window, maxWindow, summary, turns, pending, notice), open);
+            return new Snapshot(new ChatView(summarize, window, maxWindow, summary, turns, pending, notice,
+                    revision, first, total, branch, branchCount), open);
         }
 
         static void receive(Snapshot packet, Supplier<NetworkEvent.Context> context) {

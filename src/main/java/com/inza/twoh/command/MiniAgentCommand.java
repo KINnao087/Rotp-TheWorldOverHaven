@@ -125,10 +125,57 @@ public final class MiniAgentCommand {
     }
 
     public static int request(ServerPlayerEntity player, String text, boolean fromScreen) {
+        return request(player, text, fromScreen, -1, -1);
+    }
+
+    public static void history(ServerPlayerEntity player, ChatNetwork.HistoryOp operation, long revision,
+                               int index, boolean assistant, String text) {
+        ChatMemory memory = memory(player);
+        boolean ok;
+        switch (operation) {
+            case PAGE:
+                ok = memory.navigate(revision, index);
+                break;
+            case SWITCH:
+                ok = memory.switchBranch(revision, index);
+                break;
+            case CONTINUE:
+                ok = assistant && memory.fork(revision, index, true);
+                break;
+            case DELETE:
+                ok = memory.edit(revision, index, assistant, "");
+                break;
+            case EDIT:
+                ok = !text.trim().isEmpty() && text.length() <= (assistant ? ChatText.MAX_REPLY : ChatText.MAX_REQUEST)
+                        && text.chars().noneMatch(c -> Character.isISOControl(c) && !(assistant && c == '\n'))
+                        && memory.edit(revision, index, assistant, text);
+                break;
+            case RESEND:
+                if (index >= 0 && !assistant) {
+                    request(player, text, true, revision, index);
+                    return;
+                }
+                ok = false;
+                break;
+            default:
+                throw new IllegalArgumentException();
+        }
+        if (!ok) {
+            memory.notice(ChatText.STALE);
+        }
+        ChatNetwork.show(player, memory.view(), false);
+    }
+
+    private static int request(ServerPlayerEntity player, String text, boolean fromScreen, long revision, int forkIndex) {
         if (!player.createCommandSourceStack().hasPermission(CommandExecutor.PERMISSION_LEVEL)) {
             return 0;
         }
         ChatMemory memory = memory(player);
+        if (fromScreen && forkIndex < 0 && ChatText.CLEAR.equals(text.trim())) {
+            ChatMemory fresh = runner(player).clear(player.getUUID());
+            ChatNetwork.show(player, fresh.view(), false);
+            return 1;
+        }
         PlayerSession game = new PlayerSession(player.getServer(), player, memory, fromScreen);
         if (text.trim().isEmpty() || text.length() > ChatText.MAX_REQUEST
                 || text.chars().anyMatch(Character::isISOControl)) {
@@ -142,7 +189,7 @@ public final class MiniAgentCommand {
             return 0;
         }
         return runner(player).start(player.getUUID(), player.getGameProfile().getName(), text, game,
-                client, game::refresh) ? 1 : 0;
+                client, game::refresh, revision, forkIndex) ? 1 : 0;
     }
 
     @SubscribeEvent

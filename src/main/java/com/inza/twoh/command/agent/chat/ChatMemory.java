@@ -8,17 +8,21 @@ import com.inza.twoh.command.agent.entitiy.ChatTurn;
 import com.inza.twoh.command.agent.entitiy.ChatView;
 
 import java.io.IOException;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * EN: One player's bounded history. Evict whole turns; never split a question from its answer.
- * 中文：维护单个玩家的有限历史，按整轮淘汰，不把提问和回答拆开。
+ * EN: Keep the editable transcript separate from the bounded model input.
+ * 中文：完整的可编辑记录与发给模型的有限上下文分别维护。
  */
 public final class ChatMemory {
-    private final Deque<ChatTurn> recent = new ArrayDeque<>();
+    private static final AtomicLong REVISIONS = new AtomicLong();
+    private final List<List<ChatTurn>> branches = new ArrayList<>();
+    private int branch;
+    private int contextStart;
+    private int page = -1;
+    private long revision = REVISIONS.incrementAndGet();
     private int requestedTokens = TokenBudget.DEFAULT_WINDOW;
     private int modelLimit;
     private boolean summarize;
@@ -26,6 +30,93 @@ public final class ChatMemory {
     private String pending = "";
     private String notice = "";
     private boolean watching;
+
+    public ChatMemory() {
+        branches.add(new ArrayList<>());
+    }
+
+    private List<ChatTurn> transcript() {
+        return branches.get(branch);
+    }
+
+    // EN: A cleared conversation has a new identity; in-flight work keeps only the detached old memory.
+    // 中文：清空后换用新会话对象，仍在运行的任务只持有旧记录。
+    public synchronized ChatMemory cleared() {
+        ChatMemory fresh = new ChatMemory();
+        fresh.requestedTokens = requestedTokens;
+        fresh.modelLimit = modelLimit;
+        fresh.summarize = summarize;
+        fresh.watching = watching;
+        fresh.notice = ChatText.CLEARED;
+        return fresh;
+    }
+
+    public synchronized boolean navigate(long expected, int index) {
+        if (revision != expected || index < 0 || index >= transcript().size()) {
+            return false;
+        }
+        page = index / ChatText.DISPLAY_TURNS;
+        return true;
+    }
+
+    private boolean editable(long expected) {
+        return pending.isEmpty() && expected == revision;
+    }
+
+    private boolean validIndex(int index) {
+        return index >= 0 && index < transcript().size();
+    }
+
+    private void invalidateContext() {
+        // EN: Never reuse a summary that may mention an edited message or a different future.
+        // 中文：修改节点或切换分支后，不能复用可能包含旧文字或另一条时间线的摘要。
+        revision = REVISIONS.incrementAndGet();
+        contextStart = 0;
+        summary = "";
+        notice = "";
+    }
+
+    public synchronized boolean edit(long expected, int index, boolean assistant, String text) {
+        if (!editable(expected) || !validIndex(index)) {
+            return false;
+        }
+        ChatTurn old = transcript().get(index);
+        if ((assistant ? old.answer : old.request).isEmpty()) {
+            return false;
+        }
+        ChatTurn replacement = assistant ? new ChatTurn(old.request, text) : new ChatTurn(text, old.answer);
+        if (replacement.request.isEmpty() && replacement.answer.isEmpty()) {
+            transcript().remove(index);
+        } else {
+            transcript().set(index, replacement);
+        }
+        invalidateContext();
+        return true;
+    }
+
+    public synchronized boolean fork(long expected, int index, boolean afterAnswer) {
+        if (!editable(expected) || !validIndex(index)) {
+            return false;
+        }
+        ChatTurn point = transcript().get(index);
+        if ((afterAnswer ? point.answer : point.request).isEmpty()) {
+            return false;
+        }
+        // EN: Turns are immutable; the new branch shares only the retained prefix.
+        // 中文：问答对象不可变，新分支只引用所选节点之前需要保留的前缀。
+        branches.add(new ArrayList<>(transcript().subList(0, afterAnswer ? index + 1 : index)));
+        return switchBranch(expected, branches.size() - 1);
+    }
+
+    public synchronized boolean switchBranch(long expected, int target) {
+        if (!editable(expected) || target < 0 || target >= branches.size()) {
+            return false;
+        }
+        branch = target;
+        page = -1;
+        invalidateContext();
+        return true;
+    }
 
     public synchronized void watch(boolean open) {
         watching = open;
@@ -52,12 +143,14 @@ public final class ChatMemory {
     }
 
     public synchronized void begin(String request) {
+        page = -1;
         pending = request;
         notice = "";
     }
 
     public synchronized void remember(String answer) {
-        recent.addLast(new ChatTurn(pending, answer));
+        transcript().add(new ChatTurn(pending, answer));
+        revision = REVISIONS.incrementAndGet();
     }
 
     public synchronized void end() {
@@ -71,13 +164,12 @@ public final class ChatMemory {
     public synchronized ChatView view() {
         // EN: Limit the GUI packet, not the model's history.
         // 中文：只限制界面快照的大小，不按轮数限制模型上下文。
-        Deque<ChatTurn> visible = new ArrayDeque<>();
-        java.util.Iterator<ChatTurn> cursor = recent.descendingIterator();
-        while (cursor.hasNext() && visible.size() < ChatText.DISPLAY_TURNS) {
-            visible.addFirst(cursor.next());
-        }
+        int total = transcript().size();
+        int lastPage = Math.max(0, total - 1) / ChatText.DISPLAY_TURNS;
+        int first = (page < 0 ? lastPage : Math.min(page, lastPage)) * ChatText.DISPLAY_TURNS;
+        int end = first + Math.min(ChatText.DISPLAY_TURNS, total - first);
         return new ChatView(summarize, Math.min(requestedTokens, modelLimit), modelLimit,
-                summary, new ArrayList<>(visible), pending, notice);
+                summary, transcript().subList(first, end), pending, notice, revision, first, total, branch, branches.size());
     }
 
     /**
@@ -98,7 +190,7 @@ public final class ChatMemory {
         int limit;
         boolean compress;
         synchronized (this) {
-            turns = new ArrayList<>(recent);
+            turns = new ArrayList<>(transcript().subList(contextStart, transcript().size()));
             digest = summary;
             compress = summarize;
             limit = base + Math.min(requestedTokens, cap - base);
@@ -133,9 +225,7 @@ public final class ChatMemory {
             }
         }
         synchronized (this) {
-            for (int i = 0; i < first; i++) {
-                recent.removeFirst();
-            }
+            contextStart += first;
             summary = digest;
         }
         return result;
@@ -151,7 +241,12 @@ public final class ChatMemory {
         }
         for (int i = first; i < turns.size(); i++) {
             ChatTurn turn = turns.get(i);
-            appendRequest(messages, sender, turn.request);
+            if (!turn.request.isEmpty()) {
+                appendRequest(messages, sender, turn.request);
+            }
+            if (turn.answer.isEmpty()) {
+                continue;
+            }
             JsonObject reply = new JsonObject();
             reply.addProperty(Wire.TYPE, Wire.REPLY);
             reply.addProperty(Wire.TEXT, turn.answer);
@@ -198,8 +293,12 @@ public final class ChatMemory {
         JsonArray exchanges = new JsonArray();
         for (ChatTurn turn : turns) {
             JsonObject exchange = new JsonObject();
-            exchange.addProperty(Wire.REQUEST, turn.request);
-            exchange.addProperty(Wire.REPLY, turn.answer);
+            if (!turn.request.isEmpty()) {
+                exchange.addProperty(Wire.REQUEST, turn.request);
+            }
+            if (!turn.answer.isEmpty()) {
+                exchange.addProperty(Wire.REPLY, turn.answer);
+            }
             exchanges.add(exchange);
         }
         data.add(Wire.MESSAGES, exchanges);

@@ -9,13 +9,11 @@ import com.inza.twoh.command.agent.chat.ChatText;
 import com.inza.twoh.command.agent.chat.TokenBudget;
 
 import java.io.IOException;
-import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 
@@ -56,7 +54,7 @@ public final class AgentRunner {
         }
     }
 
-    private final Set<UUID> active = new HashSet<>();
+    private final Map<UUID, ChatMemory> active = new HashMap<>();
     private final Map<UUID, ChatMemory> memories = new HashMap<>();
     private final Executor workers;
 
@@ -74,11 +72,29 @@ public final class AgentRunner {
 
     public synchronized void forget(UUID issuer) {
         memories.remove(issuer);
+        active.remove(issuer);
+    }
+
+    public synchronized ChatMemory clear(UUID issuer) {
+        ChatMemory fresh = memory(issuer).cleared();
+        memories.put(issuer, fresh);
+        active.remove(issuer);
+        return fresh;
+    }
+
+    private synchronized boolean current(UUID issuer, ChatMemory memory) {
+        return active.get(issuer) == memory;
     }
 
     public boolean start(UUID issuer, String senderName, String request, Game game, Model model, Runnable refresh) {
-        synchronized (active) {
-            if (active.contains(issuer)) {
+        return start(issuer, senderName, request, game, model, refresh, -1, -1);
+    }
+
+    public boolean start(UUID issuer, String senderName, String request, Game game, Model model, Runnable refresh,
+                         long revision, int forkIndex) {
+        ChatMemory memory;
+        synchronized (this) {
+            if (active.containsKey(issuer)) {
                 game.tell(Text.IN_PROGRESS);
                 return false;
             }
@@ -86,11 +102,14 @@ public final class AgentRunner {
                 game.tell(Text.BUSY);
                 return false;
             }
-            active.add(issuer);
+            memory = memory(issuer);
+            if (forkIndex >= 0 && !memory.fork(revision, forkIndex, false)) {
+                game.tell(ChatText.STALE);
+                return false;
+            }
+            active.put(issuer, memory);
+            memory.begin(request);
         }
-
-        ChatMemory memory = memory(issuer);
-        memory.begin(request);
         Session session = new Session(issuer, game, model, memory, senderName, request, refresh);
         game.tell(Text.PARSING);
         session.next();
@@ -114,11 +133,36 @@ public final class AgentRunner {
             this.game = game;
             // EN: Pin the client for all tool rounds, even if an administrator switches models.
             // 中文：整个工具循环绑定同一个客户端，不受管理员中途切换模型影响。
-            this.model = model;
+            this.model = new Model() {
+                @Override
+                public int contextTokens() {
+                    return model.contextTokens();
+                }
+
+                @Override
+                public int inputTokens(JsonArray messages) throws IOException {
+                    requireCurrent();
+                    return model.inputTokens(messages);
+                }
+
+                @Override
+                public String complete(JsonArray messages) throws IOException {
+                    requireCurrent();
+                    return model.complete(messages);
+                }
+            };
             this.memory = memory;
             this.sender = sender;
             this.request = request;
             this.refresh = refresh;
+        }
+
+        // EN: Stop subsequent summary/count calls too; a request already sent cannot be recalled.
+        // 中文：一并阻止后续的摘要和计数请求；已发到供应商的请求无法撤回。
+        void requireCurrent() throws IOException {
+            if (!current(issuer, memory)) {
+                throw new IOException(ChatText.CLEARED);
+            }
         }
 
         void append(String role, String content) {
@@ -136,13 +180,20 @@ public final class AgentRunner {
         // EN: There is exactly one in-flight inference per session; history is handed back before mutation.
         // 中文：每个会话同时只有一次推理；主线程在推理结束后才会追加历史。
         void infer() {
+            if (!current(issuer, memory)) {
+                return;
+            }
             Runnable continuation;
             try {
                 if (history.size() == 0) {
                     append(Wire.SYSTEM, AgentStrings.SYSTEM_PROMPT);
                     ChatMemory.appendRequest(history, sender, request);
                 }
-                String content = model.complete(memory.prepare(history, sender, model));
+                JsonArray input = memory.prepare(history, sender, model);
+                if (!current(issuer, memory)) {
+                    return;
+                }
+                String content = model.complete(input);
                 ModelReplyParser.Decision decision = ModelReplyParser.parse(content);
                 continuation = () -> accept(content, decision);
             } catch (IOException exception) {
@@ -159,6 +210,11 @@ public final class AgentRunner {
             final Runnable action = continuation;
             try {
                 game.onServerThread(() -> {
+                    // EN: A reply arriving after /clear must neither execute nor overwrite the new conversation.
+                    // 中文：清空后才返回的旧回复不能执行命令，也不能写入新对话。
+                    if (!current(issuer, memory)) {
+                        return;
+                    }
                     if (!game.isCurrent()) {
                         release();
                         refresh.run();
@@ -184,7 +240,6 @@ public final class AgentRunner {
             }
             switch (decision.kind) {
                 case REPLY:
-                    memory.remember(decision.value);
                     finish(decision.value);
                     return;
                 case COMMAND:
@@ -249,6 +304,7 @@ public final class AgentRunner {
         }
 
         void finish(String text) {
+            memory.remember(text);
             release();
             game.tell(text);
             game.notifyCompletion(text);
@@ -256,8 +312,8 @@ public final class AgentRunner {
 
         void release() {
             memory.end();
-            synchronized (active) {
-                active.remove(issuer);
+            synchronized (AgentRunner.this) {
+                active.remove(issuer, memory);
             }
         }
     }

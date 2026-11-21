@@ -6,6 +6,22 @@ package com.inza.twoh.command.agent.chat;
  */
 public final class ChatText {
     public static final String CHAT = "chat";
+    public static final String CLEAR = "/clear";
+    public static final String CLEARED = "已清空所有聊天分支和摘要，保留模型与窗口设置。";
+    public static final String STALE = "对话状态已变化，请重新选择消息。";
+    public static final String EDIT = "编辑";
+    public static final String DELETE = "删除";
+    public static final String CONFIRM_DELETE = "确认删除";
+    public static final String SAVE = "保存";
+    public static final String CANCEL = "取消";
+    public static final String RESEND = "从此重发";
+    public static final String CONTINUE = "从此继续";
+    public static final String PREVIOUS = "上一页";
+    public static final String NEXT = "下一页";
+    public static final String BRANCH = "分支 ";
+    public static final String HISTORY_HINT = "点消息可编辑 · ↑↓ 历史 · /clear 清空";
+    public static final String EDIT_HINT = "编辑中 · Esc 取消";
+    public static final String LINE_HINT = " · ↑↓ 换行 · Shift+Enter 插行";
     public static final String CHANNEL = "agent_chat";
     public static final String SETTINGS = "twoh_agent_chat";
     public static final String SUMMARY = "summary";

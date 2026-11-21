@@ -1,6 +1,7 @@
 package com.inza.twoh.client;
 
 import com.inza.twoh.command.agent.chat.ChatNetwork;
+import com.inza.twoh.command.agent.chat.ChatNetwork.HistoryOp;
 import com.inza.twoh.command.agent.chat.ChatText;
 import com.inza.twoh.command.agent.entitiy.ChatTurn;
 import com.inza.twoh.command.agent.entitiy.ChatView;
@@ -20,12 +21,21 @@ import java.util.List;
 /** EN: A private, non-pausing conversation screen. 中文：私人 AI 聊天窗口，不暂停游戏。 */
 public final class AgentChatScreen extends Screen {
     private final List<IReorderingProcessor> lines = new ArrayList<>();
+    private final List<Integer> owners = new ArrayList<>();
     private ChatView view;
     private TextFieldWidget input;
     private Button send;
     private Button summary;
     private TextFieldWidget budget;
     private Button apply;
+    private Button older, newer, previousBranch, nextBranch, edit, delete, fork;
+    private int selected = -1;
+    private boolean confirmDelete;
+    private ChatMessageDraft editor;
+    private int recall = -1;
+    private int seekIndex;
+    private int seekDirection;
+    private String savedDraft = "";
     private boolean awaiting;
     private int scroll;
 
@@ -38,6 +48,14 @@ public final class AgentChatScreen extends Screen {
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen instanceof AgentChatScreen) {
             AgentChatScreen screen = (AgentChatScreen) mc.screen;
+            if (view.revision != screen.view.revision || view.first != screen.view.first) {
+                screen.leaveEditor();
+                screen.select(-1);
+                screen.scroll = 0;
+            }
+            if (view.revision != screen.view.revision) {
+                screen.resetRecall();
+            }
             screen.view = view;
             screen.awaiting = false;
             if (!screen.budget.isFocused() || screen.settingsSent) {
@@ -46,6 +64,9 @@ public final class AgentChatScreen extends Screen {
             screen.settingsSent = false;
             screen.layoutLines();
             screen.updateControls();
+            if (screen.seekDirection != 0) {
+                screen.seek(screen.seekIndex, screen.seekDirection);
+            }
         } else if (open) {
             mc.setScreen(new AgentChatScreen(view));
         }
@@ -60,7 +81,7 @@ public final class AgentChatScreen extends Screen {
         int w = panelWidth();
         int bottom = height - 29;
         input = new TextFieldWidget(font, x + 4, bottom + 2, w - 65, 17, new StringTextComponent(ChatText.INPUT));
-        input.setMaxLength(ChatText.MAX_REQUEST);
+        input.setMaxLength(editor != null && editor.assistant ? ChatText.MAX_REPLY : ChatText.MAX_REQUEST);
         input.setValue(draft);
         children.add(input);
         setInitialFocus(input);
@@ -73,6 +94,13 @@ public final class AgentChatScreen extends Screen {
         budget.setValue(Integer.toString(view.window));
         children.add(budget);
         apply = button(x + w - 44, 29, 40, ChatText.APPLY, b -> configure(view.summarize, enteredBudget()));
+        older = button(x + 4, 51, 43, ChatText.PREVIOUS, b -> page(view.first - 1));
+        newer = button(x + 49, 51, 43, ChatText.NEXT, b -> page(view.first + view.turns.size()));
+        previousBranch = button(x + w - 52, 51, 22, "<", b -> switchBranch(-1));
+        nextBranch = button(x + w - 27, 51, 22, ">", b -> switchBranch(1));
+        edit = button(x + 4, bottom - 43, 52, ChatText.EDIT, b -> editOrSave());
+        delete = button(x + 59, bottom - 43, 64, ChatText.DELETE, b -> deleteOrCancel());
+        fork = button(x + 126, bottom - 43, 74, ChatText.RESEND, b -> fork());
         budget.setResponder(value -> updateControls());
         input.setResponder(value -> updateControls());
         layoutLines();
@@ -104,7 +132,16 @@ public final class AgentChatScreen extends Screen {
         if (!send.active) {
             return;
         }
+        if (editor != null) {
+            if (editor.assistant) {
+                editOrSave();
+            } else {
+                fork();
+            }
+            return;
+        }
         String text = input.getValue().trim();
+        resetRecall();
         awaiting = true;
         input.setValue("");
         scroll = 0;
@@ -116,12 +153,141 @@ public final class AgentChatScreen extends Screen {
 
     private void updateControls() {
         boolean idle = !awaiting && view.pending.isEmpty();
-        send.active = idle && !input.getValue().trim().isEmpty();
+        boolean browsing = editor == null;
+        boolean valid = browsing ? !input.getValue().trim().isEmpty() : validDraft();
+        boolean hasSelection = idle && selected >= 0;
+        send.active = valid && (idle || (browsing && ChatText.CLEAR.equals(input.getValue().trim()) && !awaiting));
+        send.setMessage(new StringTextComponent(browsing ? ChatText.SEND : editor.assistant ? ChatText.SAVE : ChatText.RESEND));
         summary.setMessage(new StringTextComponent(view.summarize ? ChatText.SUMMARY_ON : ChatText.SUMMARY_OFF));
-        summary.active = idle;
-        budget.setEditable(idle);
+        summary.active = idle && browsing;
+        budget.setEditable(idle && browsing);
         int entered = enteredBudget();
-        apply.active = idle && entered >= 0 && entered <= view.maxWindow && entered != view.window;
+        apply.active = idle && browsing && entered >= 0 && entered <= view.maxWindow && entered != view.window;
+        older.active = idle && browsing && view.first > 0;
+        newer.active = idle && browsing && view.first + view.turns.size() < view.total;
+        previousBranch.active = idle && browsing && view.branch > 0;
+        nextBranch.active = idle && browsing && view.branch + 1 < view.branchCount;
+        edit.active = hasSelection && (browsing || valid);
+        delete.active = hasSelection;
+        fork.active = hasSelection && (browsing || (!editor.assistant && valid));
+        edit.setMessage(new StringTextComponent(browsing ? ChatText.EDIT : ChatText.SAVE));
+        delete.setMessage(new StringTextComponent(!browsing ? ChatText.CANCEL : confirmDelete ? ChatText.CONFIRM_DELETE : ChatText.DELETE));
+        fork.setMessage(new StringTextComponent(assistantSelected() ? ChatText.CONTINUE : ChatText.RESEND));
+    }
+
+    private boolean assistantSelected() {
+        return selected >= 0 && (selected & 1) != 0;
+    }
+
+    private String selectedText() {
+        ChatTurn turn = view.turns.get(selected / 2 - view.first);
+        return assistantSelected() ? turn.answer : turn.request;
+    }
+
+    private void select(int key) {
+        selected = key;
+        confirmDelete = false;
+    }
+
+    private boolean validDraft() {
+        String text = editor.text(input);
+        return !text.trim().isEmpty() && text.length() <= (editor.assistant ? ChatText.MAX_REPLY : ChatText.MAX_REQUEST);
+    }
+
+    private void history(HistoryOp op, int index, boolean assistant, String text) {
+        awaiting = true;
+        updateControls();
+        ChatNetwork.history(op, view.revision, index, assistant, text);
+    }
+
+    private void page(int target) {
+        history(HistoryOp.PAGE, target, false, "");
+    }
+
+    private void switchBranch(int step) {
+        history(HistoryOp.SWITCH, view.branch + step, false, "");
+    }
+
+    private void editOrSave() {
+        if (selected < 0) {
+            return;
+        }
+        if (editor == null) {
+            resetRecall();
+            confirmDelete = false;
+            editor = new ChatMessageDraft(assistantSelected(), selectedText(), input.getValue());
+            String initial = editor.line();
+            input.setMaxLength(editor.assistant ? ChatText.MAX_REPLY : ChatText.MAX_REQUEST);
+            input.setValue(initial);
+            focusInput();
+        } else {
+            String replacement = editor.text(input);
+            history(HistoryOp.EDIT, selected / 2, assistantSelected(), replacement);
+        }
+        updateControls();
+    }
+
+    private void deleteOrCancel() {
+        if (editor != null) {
+            leaveEditor();
+        } else if (confirmDelete) {
+            history(HistoryOp.DELETE, selected / 2, assistantSelected(), "");
+        } else {
+            confirmDelete = true;
+        }
+        updateControls();
+    }
+
+    private void fork() {
+        boolean assistant = assistantSelected();
+        String text = assistant ? "" : editor == null ? selectedText() : editor.text(input);
+        history(assistant ? HistoryOp.CONTINUE : HistoryOp.RESEND, selected / 2, assistant, text);
+    }
+
+    private void leaveEditor() {
+        if (editor != null) {
+            String originalDraft = editor.composer;
+            editor = null;
+            input.setMaxLength(ChatText.MAX_REQUEST);
+            input.setValue(originalDraft);
+        }
+    }
+
+    private void focusInput() {
+        budget.setFocus(false);
+        setFocused(input);
+        input.setFocus(true);
+    }
+
+    private void resetRecall() {
+        recall = -1;
+        seekDirection = 0;
+        savedDraft = "";
+    }
+
+    // EN: Page through the transcript, not the model window; DOWN past the latest restores the unsent draft.
+    // 中文：遍历完整分支而不是模型窗口；越过最新记录时恢复玩家原先尚未发送的草稿。
+    private void seek(int index, int direction) {
+        seekDirection = 0;
+        while (index >= 0 && index < view.total) {
+            if (index < view.first || index >= view.first + view.turns.size()) {
+                seekIndex = index;
+                seekDirection = direction;
+                page(index);
+                return;
+            }
+            String text = view.turns.get(index - view.first).request;
+            if (!text.isEmpty()) {
+                recall = index;
+                input.setValue(text);
+                return;
+            }
+            index += direction;
+        }
+        if (direction > 0 && recall >= 0) {
+            input.setValue(savedDraft);
+            resetRecall();
+        }
     }
 
     private int panelWidth() {
@@ -133,33 +299,43 @@ public final class AgentChatScreen extends Screen {
     }
 
     private int visibleLines() {
-        return Math.max(1, (height - 102) / (font.lineHeight + 2));
+        return Math.max(1, (height - 151) / (font.lineHeight + 2));
     }
 
-    private void append(String text, TextFormatting color) {
-        lines.addAll(font.split(new StringTextComponent(text).withStyle(color), panelWidth() - 20));
+    private void append(String text, TextFormatting color, int owner) {
+        for (IReorderingProcessor line : font.split(new StringTextComponent(text).withStyle(color), panelWidth() - 20)) {
+            lines.add(line);
+            owners.add(owner);
+        }
     }
 
     private void layoutLines() {
         lines.clear();
+        owners.clear();
         if (!view.summary.isEmpty()) {
-            append(ChatText.SUMMARY_LABEL + view.summary, TextFormatting.GRAY);
+            append(ChatText.SUMMARY_LABEL + view.summary, TextFormatting.GRAY, -1);
         }
         ChatTurn last = null;
+        int index = view.first;
         for (ChatTurn turn : view.turns) {
-            append(ChatText.YOU + turn.request, TextFormatting.AQUA);
-            append(ChatText.AI + turn.answer, TextFormatting.WHITE);
+            if (!turn.request.isEmpty()) {
+                append(ChatText.YOU + turn.request, TextFormatting.AQUA, index * 2);
+            }
+            if (!turn.answer.isEmpty()) {
+                append(ChatText.AI + turn.answer, TextFormatting.WHITE, index * 2 + 1);
+            }
+            index++;
             last = turn;
         }
         if (!view.pending.isEmpty()) {
-            append(ChatText.YOU + view.pending, TextFormatting.AQUA);
-            append(ChatText.WORKING, TextFormatting.GRAY);
+            append(ChatText.YOU + view.pending, TextFormatting.AQUA, -1);
+            append(ChatText.WORKING, TextFormatting.GRAY, -1);
         }
         if (!view.notice.isEmpty() && (last == null || !view.notice.equals(last.answer))) {
-            append(view.notice, TextFormatting.YELLOW);
+            append(view.notice, TextFormatting.YELLOW, -1);
         }
         if (lines.isEmpty()) {
-            append(ChatText.EMPTY, TextFormatting.GRAY);
+            append(ChatText.EMPTY, TextFormatting.GRAY, -1);
         }
         scroll = Math.min(scroll, Math.max(0, lines.size() - visibleLines()));
     }
@@ -172,7 +348,54 @@ public final class AgentChatScreen extends Screen {
     }
 
     @Override
+    public boolean mouseClicked(double x, double y, int button) {
+        if (button == 0 && !awaiting && editor == null && view.pending.isEmpty()
+                && x >= left() + 4 && x < left() + panelWidth() - 4 && y >= 76) {
+            int end = lines.size() - scroll;
+            int first = Math.max(0, end - visibleLines());
+            int row = first + (int) ((y - 76) / (font.lineHeight + 2));
+            if (row < end && y < height - 74) {
+                select(owners.get(row));
+                updateControls();
+                return true;
+            }
+        }
+        ChatMessageDraft before = editor;
+        boolean handled = super.mouseClicked(x, y, button);
+        if (before != editor) {
+            focusInput();
+        }
+        return handled;
+    }
+
+    @Override
     public boolean keyPressed(int key, int scanCode, int modifiers) {
+        if (editor != null && key == GLFW.GLFW_KEY_ESCAPE) {
+            leaveEditor();
+            updateControls();
+            return true;
+        }
+        if (input.isFocused() && !awaiting && (key == GLFW.GLFW_KEY_UP || key == GLFW.GLFW_KEY_DOWN)) {
+            int direction = key == GLFW.GLFW_KEY_UP ? -1 : 1;
+            if (editor != null) {
+                editor.move(input, direction);
+            } else {
+                if (recall < 0) {
+                    savedDraft = input.getValue();
+                }
+                seek((recall < 0 ? view.total : recall) + direction, direction);
+            }
+            return true;
+        }
+        if (input.isFocused() && editor != null && editor.assistant && !awaiting) {
+            if (key == GLFW.GLFW_KEY_BACKSPACE && editor.merge(input)) {
+                return true;
+            }
+            if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) && hasShiftDown()) {
+                editor.split(input);
+                return true;
+            }
+        }
         if (input.isFocused() && (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER)) {
             sendMessage();
             return true;
@@ -193,18 +416,32 @@ public final class AgentChatScreen extends Screen {
         drawCenteredString(matrices, font, title, width / 2, 10, 0xFFFFFF);
         font.draw(matrices, ChatText.LIMIT, x + w - 128 - font.width(ChatText.LIMIT), 35, 0xDCDCDC);
         budget.render(matrices, mouseX, mouseY, partialTicks);
-        fill(matrices, x + 4, 52, x + w - 4, height - 45, 0xC00D0F18);
+        String branch = ChatText.BRANCH + (view.branch + 1) + "/" + view.branchCount;
+        font.draw(matrices, branch, x + w - 58 - font.width(branch), 57, 0xDCDCDC);
+        fill(matrices, x + 4, 73, x + w - 4, height - 74, 0xC00D0F18);
+        String cap = ChatText.HINT + view.maxWindow;
+        if (font.width(cap) < w - 210) {
+            font.draw(matrices, cap, x + w - 6 - font.width(cap), height - 66, 0xBCB9C9);
+        }
         int end = lines.size() - scroll;
         int start = Math.max(0, end - visibleLines());
         for (int i = start; i < end; i++) {
-            font.draw(matrices, lines.get(i), x + 9, 56 + (i - start) * (font.lineHeight + 2), 0xFFFFFF);
+            int y = 76 + (i - start) * (font.lineHeight + 2);
+            if (selected >= 0 && owners.get(i) == selected) {
+                fill(matrices, x + 5, y - 1, x + w - 5, y + font.lineHeight + 1, 0xFF403750);
+            }
+            font.draw(matrices, lines.get(i), x + 9, y, 0xFFFFFF);
         }
-        String hint = view.maxWindow == 0 ? ChatText.UNKNOWN_LIMIT : ChatText.HINT + view.maxWindow + " token";
+        String hint = editor == null ? ChatText.HISTORY_HINT : ChatText.EDIT_HINT;
+        if (editor != null && editor.assistant) {
+            hint += ChatText.LINE_HINT + " " + editor.position();
+        }
         font.draw(matrices, hint, x + 5, height - 41, 0xBCB9C9);
         input.render(matrices, mouseX, mouseY, partialTicks);
         super.render(matrices, mouseX, mouseY, partialTicks);
         if (summary.isHovered() || budget.isHovered() || apply.isHovered()) {
-            String help = summary.isHovered() ? ChatText.SUMMARY_HELP : ChatText.WINDOW_HELP;
+            String help = summary.isHovered() ? ChatText.SUMMARY_HELP : ChatText.WINDOW_HELP + " "
+                    + (view.maxWindow == 0 ? ChatText.UNKNOWN_LIMIT : ChatText.HINT + view.maxWindow);
             renderTooltip(matrices, font.split(new StringTextComponent(help), Math.min(w - 20, 210)), mouseX, mouseY);
         }
     }
