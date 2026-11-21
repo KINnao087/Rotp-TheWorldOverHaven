@@ -30,7 +30,7 @@ import java.util.function.Supplier;
  * 中文：客户端只提交新消息或设置；玩家身份、历史和凭据由服务端掌管。
  */
 public final class ChatNetwork {
-    private static final String VERSION = "2";
+    private static final String VERSION = "3";
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(AddonMain.MOD_ID, ChatText.CHANNEL), () -> VERSION,
             VERSION::equals, VERSION::equals);
@@ -140,7 +140,7 @@ public final class ChatNetwork {
                     return;
                 }
                 if (!player.createCommandSourceStack().hasPermission(CommandExecutor.PERMISSION_LEVEL)) {
-                    show(player, new ChatView(false, ChatText.DEFAULT_WINDOW, "", Collections.emptyList(),
+                    show(player, new ChatView(false, 0, 0, "", Collections.emptyList(),
                             "", Text.PLAYER_CHANGED), false);
                     return;
                 }
@@ -167,6 +167,7 @@ public final class ChatNetwork {
             buffer.writeBoolean(open);
             buffer.writeBoolean(view.summarize);
             buffer.writeVarInt(view.window);
+            buffer.writeVarInt(view.maxWindow);
             buffer.writeUtf(view.summary);
             buffer.writeVarInt(view.turns.size());
             for (ChatTurn turn : view.turns) {
@@ -181,9 +182,10 @@ public final class ChatNetwork {
             boolean open = buffer.readBoolean();
             boolean summarize = buffer.readBoolean();
             int window = buffer.readVarInt();
+            int maxWindow = buffer.readVarInt();
             String summary = buffer.readUtf(ChatText.MAX_SUMMARY);
             int count = buffer.readVarInt();
-            if (window < ChatText.MIN_WINDOW || window > ChatText.MAX_WINDOW || count < 0 || count > window) {
+            if (window < 0 || window > maxWindow || count < 0 || count > ChatText.DISPLAY_TURNS) {
                 throw new IllegalArgumentException(ChatText.LIMIT);
             }
             List<ChatTurn> turns = new ArrayList<>(count);
@@ -192,7 +194,7 @@ public final class ChatNetwork {
             }
             String pending = buffer.readUtf(ChatText.MAX_REQUEST);
             String notice = buffer.readUtf(ChatText.MAX_REPLY);
-            return new Snapshot(new ChatView(summarize, window, summary, turns, pending, notice), open);
+            return new Snapshot(new ChatView(summarize, window, maxWindow, summary, turns, pending, notice), open);
         }
 
         static void receive(Snapshot packet, Supplier<NetworkEvent.Context> context) {

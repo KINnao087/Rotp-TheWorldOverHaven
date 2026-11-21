@@ -34,7 +34,7 @@ public final class ModelConfigReader {
                 JsonObject row = item.getAsJsonObject();
                 ModelConfig config = new ModelConfig(row.get("id").getAsString(), row.get("provider").getAsString(),
                         row.get("baseUrl").getAsString(), row.get("model").getAsString(),
-                        row.get("credentialRef").getAsString());
+                        row.get("credentialRef").getAsString(), row.has("contextTokens") ? row.get("contextTokens").getAsInt() : 0);
                 if (profiles.put(config.id, config) != null || profiles.size() > ConfigText.MAX_PROFILES) {
                     throw new IOException(ConfigText.STORAGE_ERROR);
                 }

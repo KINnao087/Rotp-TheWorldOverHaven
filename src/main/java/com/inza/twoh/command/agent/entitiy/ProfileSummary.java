@@ -10,12 +10,14 @@ public final class ProfileSummary {
     public final String baseUrl;
     public final String model;
     public final boolean hasKey;
+    public final int contextTokens;
 
-    public ProfileSummary(String id, String provider, String baseUrl, String model, boolean hasKey) {
+    public ProfileSummary(String id, String provider, String baseUrl, String model, boolean hasKey, int contextTokens) {
         this.id = id;
         this.provider = provider;
         this.baseUrl = baseUrl;
         this.model = model;
         this.hasKey = hasKey;
+        this.contextTokens = contextTokens;
     }
 }

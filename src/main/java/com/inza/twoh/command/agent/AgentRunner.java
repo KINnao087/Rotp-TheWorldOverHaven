@@ -6,10 +6,13 @@ import com.inza.twoh.command.agent.AgentStrings.Text;
 import com.inza.twoh.command.agent.AgentStrings.Wire;
 import com.inza.twoh.command.agent.chat.ChatMemory;
 import com.inza.twoh.command.agent.chat.ChatText;
+import com.inza.twoh.command.agent.chat.TokenBudget;
 
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -26,6 +29,14 @@ public final class AgentRunner {
 
     public interface Model {
         String complete(JsonArray messages) throws IOException;
+
+        default int contextTokens() {
+            return TokenBudget.DEFAULT_WINDOW + TokenBudget.RESERVE;
+        }
+
+        default int inputTokens(JsonArray messages) throws IOException {
+            return TokenBudget.estimate(messages);
+        }
     }
 
     /**
@@ -129,15 +140,16 @@ public final class AgentRunner {
             try {
                 if (history.size() == 0) {
                     append(Wire.SYSTEM, AgentStrings.SYSTEM_PROMPT);
-                    memory.appendContext(history, sender, model);
                     ChatMemory.appendRequest(history, sender, request);
                 }
-                String content = model.complete(history);
+                String content = model.complete(memory.prepare(history, sender, model));
                 ModelReplyParser.Decision decision = ModelReplyParser.parse(content);
                 continuation = () -> accept(content, decision);
             } catch (IOException exception) {
                 String reason = exception.getMessage();
                 boolean known = Text.CONFIG_REQUIRED.equals(reason) || ChatText.SUMMARY_ERROR.equals(reason)
+                        || ChatText.BUDGET_ERROR.equals(reason) || ChatText.UNKNOWN_LIMIT.equals(reason)
+                        || ChatText.COUNT_ERROR.equals(reason)
                         || (reason != null && reason.startsWith(Text.HTTP_ERROR_PREFIX));
                 continuation = () -> finishWithFallback(known ? reason : Text.CONNECTION_FAILED);
             } catch (RuntimeException invalid) {
@@ -176,7 +188,7 @@ public final class AgentRunner {
                     finish(decision.value);
                     return;
                 case COMMAND:
-                    execute(raw, decision.value);
+                    execute(raw, decision.commands);
                     return;
                 case TOOL:
                     if (toolCalls >= MAX_TOOL_CALLS) {
@@ -198,21 +210,35 @@ public final class AgentRunner {
             }
         }
 
-        void execute(String raw, String command) {
-            Optional<String> failure = game.submit(command);
-            if (!failure.isPresent()) {
-                String result = ChatText.DISPATCHED + command;
-                memory.remember(result);
-                release();
-                refresh.run();
-                game.notifyCompletion(result);
-                return;
+        void execute(String raw, List<String> commands) {
+            for (int i = 0; i < commands.size(); i++) {
+                // EN: The previous command may have moved, disconnected or de-opped the issuer.
+                // 中文：前一条命令可能使玩家切换维度、下线或失去权限，继续前重新核验。
+                if (i > 0 && !game.isCurrent()) {
+                    release();
+                    refresh.run();
+                    return;
+                }
+                Optional<String> failure = game.submit(commands.get(i));
+                if (failure.isPresent()) {
+                    reportCommandError(raw, i + 1, commands.size(), failure.get());
+                    return;
+                }
             }
 
-            commandError = failure.get();
+            String result = ChatText.DISPATCHED + String.join("\n", commands);
+            memory.remember(result);
+            release();
+            refresh.run();
+            game.notifyCompletion(result);
+        }
+
+        void reportCommandError(String raw, int failedIndex, int total, String reason) {
+            commandError = String.format(Locale.ROOT, Text.BATCH_FAILURE, failedIndex, total, reason);
             JsonObject feedback = new JsonObject();
             feedback.addProperty(Wire.TYPE, Wire.COMMAND_ERROR);
-            feedback.addProperty(Wire.ERROR, commandError);
+            feedback.addProperty(Wire.FAILED_INDEX, failedIndex);
+            feedback.addProperty(Wire.ERROR, reason);
             append(Wire.ASSISTANT, raw);
             append(Wire.USER, feedback.toString());
             next();

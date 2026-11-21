@@ -8,15 +8,17 @@ import java.util.List;
 public final class ChatView {
     public final boolean summarize;
     public final int window;
+    public final int maxWindow;
     public final String summary;
     public final List<ChatTurn> turns;
     public final String pending;
     public final String notice;
 
-    public ChatView(boolean summarize, int window, String summary, List<ChatTurn> turns,
+    public ChatView(boolean summarize, int window, int maxWindow, String summary, List<ChatTurn> turns,
                     String pending, String notice) {
         this.summarize = summarize;
         this.window = window;
+        this.maxWindow = maxWindow;
         this.summary = summary;
         this.turns = Collections.unmodifiableList(new ArrayList<>(turns));
         this.pending = pending;

@@ -1,6 +1,7 @@
 package com.inza.twoh.client;
 
 import com.inza.twoh.AddonMain;
+import com.inza.twoh.client.render.OverHeavenPortalShader;
 import com.inza.twoh.client.render.OverHeavenRenderTypes;
 import com.inza.twoh.client.render.TheWorldOverHavenStandRenderer;
 import com.inza.twoh.init.InitEntities;
@@ -19,6 +20,7 @@ public class ClientInit {
     
     @SubscribeEvent
     public static void onFMLClientSetup(FMLClientSetupEvent event) {
+        event.enqueueWork(OverHeavenPortalShader::registerReloadListener);
         RenderingRegistry.registerEntityRenderingHandler(
                 InitStands.STAND_EXAMPLE_STAND.getEntityType(), TheWorldOverHavenStandRenderer::new);
         RenderTypeLookup.setRenderLayer(InitBlock.OVER_HEAVEN_FLOOR.get(), OverHeavenRenderTypes::isOverHeavenFloor);

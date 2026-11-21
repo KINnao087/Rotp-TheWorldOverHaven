@@ -69,7 +69,7 @@ public final class ModelRuntime {
                 || (!draft.replacement.isEmpty() && draft.clearKey)) {
             throw new IllegalArgumentException(ConfigText.SECRET_RULE);
         }
-        ModelConfig candidate = new ModelConfig(draft.id, draft.provider, draft.baseUrl, draft.model, "");
+        ModelConfig candidate = new ModelConfig(draft.id, draft.provider, draft.baseUrl, draft.model, "", draft.contextTokens);
         ModelConfig old = catalog.profiles.get(candidate.id);
         if (old == null && catalog.profiles.size() >= ConfigText.MAX_PROFILES) {
             throw new IllegalArgumentException(ConfigText.INVALID);
@@ -126,6 +126,6 @@ public final class ModelRuntime {
     }
 
     private static ModelConfig withReference(ModelConfig profile, String reference) {
-        return new ModelConfig(profile.id, profile.provider, profile.baseUrl, profile.model, reference);
+        return new ModelConfig(profile.id, profile.provider, profile.baseUrl, profile.model, reference, profile.contextTokens);
     }
 }

@@ -24,7 +24,7 @@ public final class AgentConfigScreen extends Screen {
     private final String active;
     private final long revision;
     private final List<ProfileSummary> profiles;
-    private final TextFieldWidget[] fields = new TextFieldWidget[5];
+    private final TextFieldWidget[] fields = new TextFieldWidget[6];
     private int selection;
     private boolean clear;
     private boolean consent;
@@ -62,15 +62,16 @@ public final class AgentConfigScreen extends Screen {
         int left = left();
         int top = top();
         int span = span();
-        int[] limits = {48, 48, 512, 128, 2048};
+        int[] limits = {48, 48, 512, 128, 2048, 9};
         for (int i = 0; i < fields.length; i++) {
-            fields[i] = new TextFieldWidget(font, left + 96, top + 38 + i * 21, span - 96, 17,
+            fields[i] = new TextFieldWidget(font, left + 96, top + 31 + i * 19, span - 96, 16,
                     label(ConfigText.LABELS[i]));
             fields[i].setMaxLength(limits[i]);
             children.add(fields[i]);
         }
         fields[4].setFormatter((text, offset) -> IReorderingProcessor.forward(
                 String.join("", Collections.nCopies(text.length(), "*")), Style.EMPTY));
+        fields[5].setFilter(text -> text.chars().allMatch(c -> c >= '0' && c <= '9'));
 
         int half = (span - 4) / 2;
         button(left, top + 145, half, ConfigText.SELECT, b -> {
@@ -96,17 +97,17 @@ public final class AgentConfigScreen extends Screen {
         if (previous == null) {
             loadSelection();
         } else {
-            fill(previous.id, previous.provider, previous.baseUrl, previous.model, previous.replacement);
+            fill(previous.id, previous.provider, previous.baseUrl, previous.model, previous.replacement, capacity(previous.contextTokens));
             flags();
         }
     }
 
     private void loadSelection() {
         if (selection < 0) {
-            fill(ConfigText.LOCAL, ConfigText.OLLAMA, ConfigText.LOCAL_URL, "", "");
+            fill(ConfigText.LOCAL, ConfigText.OLLAMA, ConfigText.LOCAL_URL, "", "", "");
         } else {
             ProfileSummary profile = profiles.get(selection);
-            fill(profile.id, profile.provider, profile.baseUrl, profile.model, "");
+            fill(profile.id, profile.provider, profile.baseUrl, profile.model, "", capacity(profile.contextTokens));
         }
         clear = false;
         consent = false;
@@ -122,7 +123,12 @@ public final class AgentConfigScreen extends Screen {
 
     private ConfigDraft draft() {
         return new ConfigDraft(fields[0].getValue(), fields[1].getValue(), fields[2].getValue(),
-                fields[3].getValue(), fields[4].getValue(), clear, consent);
+                fields[3].getValue(), fields[4].getValue(), clear, consent,
+                fields[5].getValue().isEmpty() ? 0 : Integer.parseInt(fields[5].getValue()));
+    }
+
+    private static String capacity(int tokens) {
+        return tokens == 0 ? "" : Integer.toString(tokens);
     }
 
     private void flags() {
@@ -170,7 +176,7 @@ public final class AgentConfigScreen extends Screen {
         String keyState = selected != null && selected.hasKey ? ConfigText.HAS_KEY : ConfigText.NO_KEY;
         font.draw(matrices, ConfigText.ACTIVE + active + "  |  " + keyState, left(), top() + 20, 0xDCDCDC);
         for (int i = 0; i < fields.length; i++) {
-            font.draw(matrices, ConfigText.LABELS[i], left(), top() + 42 + i * 21, 0xEEEEEE);
+            font.draw(matrices, ConfigText.LABELS[i], left(), top() + 35 + i * 19, 0xEEEEEE);
             fields[i].render(matrices, mouseX, mouseY, partialTicks);
         }
         font.drawWordWrap(label(status), left(), top() + 210, span(), 0xEEEEEE);

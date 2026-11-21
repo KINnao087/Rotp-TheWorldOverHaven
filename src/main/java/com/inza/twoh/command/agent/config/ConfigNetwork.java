@@ -37,7 +37,7 @@ import java.util.function.Supplier;
  * 中文：独立的管理通道；每次写入或测试都要在服务端重新核验权限。
  */
 public final class ConfigNetwork {
-    private static final String VERSION = "1";
+    private static final String VERSION = "2";
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(AddonMain.MOD_ID, "model_settings"), () -> VERSION,
             VERSION::equals, VERSION::equals);
@@ -118,7 +118,7 @@ public final class ConfigNetwork {
             rows = new ArrayList<>();
             for (ModelConfig profile : catalog.profiles.values()) {
                 rows.add(new ProfileSummary(profile.id, profile.provider, profile.baseUrl, profile.model,
-                        !profile.credentialRef.isEmpty()));
+                        !profile.credentialRef.isEmpty(), profile.contextTokens));
             }
         }
 
@@ -138,6 +138,7 @@ public final class ConfigNetwork {
                 buffer.writeUtf(row.baseUrl);
                 buffer.writeUtf(row.model);
                 buffer.writeBoolean(row.hasKey);
+                buffer.writeVarInt(row.contextTokens);
             }
         }
 
@@ -151,7 +152,7 @@ public final class ConfigNetwork {
             List<ProfileSummary> rows = new ArrayList<>();
             for (int i = 0; i < count; i++) {
                 rows.add(new ProfileSummary(buffer.readUtf(48), buffer.readUtf(48), buffer.readUtf(512),
-                        buffer.readUtf(128), buffer.readBoolean()));
+                        buffer.readUtf(128), buffer.readBoolean(), buffer.readVarInt()));
             }
             return new View(active, revision, rows);
         }
@@ -185,13 +186,14 @@ public final class ConfigNetwork {
             buffer.writeUtf(draft.replacement);
             buffer.writeBoolean(draft.clearKey);
             buffer.writeBoolean(draft.allowFile);
+            buffer.writeVarInt(draft.contextTokens);
         }
 
         static Edit read(PacketBuffer buffer) {
             long revision = buffer.readLong();
             boolean test = buffer.readBoolean();
             ConfigDraft draft = new ConfigDraft(buffer.readUtf(48), buffer.readUtf(48), buffer.readUtf(512),
-                    buffer.readUtf(128), buffer.readUtf(2048), buffer.readBoolean(), buffer.readBoolean());
+                    buffer.readUtf(128), buffer.readUtf(2048), buffer.readBoolean(), buffer.readBoolean(), buffer.readVarInt());
             return new Edit(draft, revision, test);
         }
 

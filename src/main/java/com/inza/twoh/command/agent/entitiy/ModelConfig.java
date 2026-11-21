@@ -1,6 +1,7 @@
 package com.inza.twoh.command.agent.entitiy;
 
 import com.inza.twoh.command.agent.config.ConfigText;
+import com.inza.twoh.command.agent.chat.TokenBudget;
 
 import java.net.URI;
 import java.util.Objects;
@@ -15,8 +16,13 @@ public final class ModelConfig {
     public final String baseUrl;
     public final String model;
     public final String credentialRef;
+    public final int contextTokens;
 
     public ModelConfig(String id, String provider, String baseUrl, String model, String reference) {
+        this(id, provider, baseUrl, model, reference, 0);
+    }
+
+    public ModelConfig(String id, String provider, String baseUrl, String model, String reference, int contextTokens) {
         this.id = text(id, 48);
         this.provider = text(provider, 48);
         this.model = text(model, 128);
@@ -31,6 +37,10 @@ public final class ModelConfig {
         }
         this.baseUrl = url.toASCIIString();
         this.credentialRef = Objects.requireNonNull(reference);
+        if (contextTokens < 0 || (contextTokens > 0 && contextTokens <= TokenBudget.RESERVE)) {
+            throw new IllegalArgumentException(ConfigText.INVALID);
+        }
+        this.contextTokens = contextTokens;
         if (!(reference.isEmpty() || reference.equals(ConfigText.ENV) || reference.matches("[a-f0-9-]{36}"))) {
             throw new IllegalArgumentException(ConfigText.INVALID);
         }
@@ -38,6 +48,19 @@ public final class ModelConfig {
 
     public boolean sameDestination(ModelConfig other) {
         return other != null && baseUrl.equals(other.baseUrl) && provider.equals(other.provider);
+    }
+
+    public boolean officialOpenAI() {
+        return "https://api.openai.com/v1".equalsIgnoreCase(baseUrl);
+    }
+
+    // EN: A proxy can serve a smaller deployment under the same name. Never guess its capacity from the name.
+    // 中文：代理下的同名模型可能有更小的实际上下文，只对官方端点使用已核实的上限。
+    public int effectiveContextTokens() {
+        if (officialOpenAI() && "gpt-6-luna".equals(model)) {
+            return contextTokens == 0 ? TokenBudget.LUNA_CONTEXT : Math.min(contextTokens, TokenBudget.LUNA_CONTEXT);
+        }
+        return contextTokens;
     }
 
     private static String text(String value, int max) {

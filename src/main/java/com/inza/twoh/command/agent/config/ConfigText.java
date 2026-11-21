@@ -25,7 +25,7 @@ public final class ConfigText {
     public static final String TEST_FAIL = "模型测试失败，请检查地址、模型名、密钥或超时。";
     public static final String TEST_BUSY = "已有连接测试在进行。";
     public static final String TITLE = "TWOH · 服务端模型设置";
-    public static final String[] LABELS = {"方案 ID", "供应商", "API 基础地址", "模型名", "新 API Key（留空保留）"};
+    public static final String[] LABELS = {"方案 ID", "供应商", "API 基础地址", "模型名", "新 Key（留空保留）", "上下文 token"};
     public static final String SELECT = "切换草稿";
     public static final String NEW = "新建";
     public static final String SAVE = "保存并应用";

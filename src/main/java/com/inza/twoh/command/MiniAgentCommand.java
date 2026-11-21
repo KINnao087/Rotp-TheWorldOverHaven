@@ -9,6 +9,7 @@ import com.inza.twoh.command.agent.ChatApi;
 import com.inza.twoh.command.agent.chat.ChatMemory;
 import com.inza.twoh.command.agent.chat.ChatNetwork;
 import com.inza.twoh.command.agent.chat.ChatText;
+import com.inza.twoh.command.agent.chat.TokenBudget;
 import com.inza.twoh.command.agent.config.ConfigText;
 import com.inza.twoh.command.agent.config.ModelRuntime;
 import com.inza.twoh.command.agent.config.ServerModels;
@@ -83,10 +84,16 @@ public final class MiniAgentCommand {
 
     private static ChatMemory memory(ServerPlayerEntity player) {
         ChatMemory memory = runner(player).memory(player.getUUID());
+        ModelRuntime runtime = ServerModels.get(player.getServer());
+        ChatApi client = runtime == null ? null : runtime.client();
+        memory.bindModel(client == null ? 0 : client.contextTokens());
         CompoundNBT preferences = player.getPersistentData().getCompound(PlayerEntity.PERSISTED_NBT_TAG)
                 .getCompound(ChatText.SETTINGS);
-        if (preferences.contains(ChatText.WINDOW)) {
-            memory.configure(preferences.getBoolean(ChatText.SUMMARY), preferences.getInt(ChatText.WINDOW));
+        if (!preferences.isEmpty()) {
+            // EN: Keep the summary preference, but never reinterpret a legacy turn count as tokens.
+            // 中文：保留旧摘要开关，不把旧版的轮数误读成 token。
+            int tokens = preferences.contains(ChatText.WINDOW) ? preferences.getInt(ChatText.WINDOW) : TokenBudget.DEFAULT_WINDOW;
+            memory.configure(preferences.getBoolean(ChatText.SUMMARY), tokens);
         }
         return memory;
     }
@@ -104,7 +111,7 @@ public final class MiniAgentCommand {
 
     public static void configureChat(ServerPlayerEntity player, boolean summary, int window) {
         ChatMemory memory = memory(player);
-        if (memory.configure(summary, window)) {
+        if (window <= memory.view().maxWindow && memory.configure(summary, window)) {
             // EN: Persist preferences across respawns, not the player's private transcript.
             // 中文：偏好设置跨重生保留，私人对话正文不写入存档。
             CompoundNBT preferences = new CompoundNBT();

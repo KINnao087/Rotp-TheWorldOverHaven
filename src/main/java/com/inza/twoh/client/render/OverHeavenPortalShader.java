@@ -1,147 +1,36 @@
 package com.inza.twoh.client.render;
 
 import com.inza.twoh.AddonMain;
+import com.inza.twoh.init.InitDimension;
 import com.mojang.blaze3d.systems.RenderSystem;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ActiveRenderInfo;
+import net.minecraft.resources.IReloadableResourceManager;
+import net.minecraft.resources.IResource;
+import net.minecraft.resources.IResourceManager;
 import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.vector.Vector3f;
-import org.lwjgl.opengl.GL11;
-import com.inza.twoh.init.InitDimension;
 import net.minecraft.util.math.vector.Vector3d;
+import net.minecraft.util.math.vector.Vector3f;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.RenderWorldLastEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.resource.ISelectiveResourceReloadListener;
+import net.minecraftforge.resource.VanillaResourceType;
+import org.apache.commons.io.IOUtils;
+import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 @Mod.EventBusSubscriber(modid = AddonMain.MOD_ID, value = Dist.CLIENT)
 public final class OverHeavenPortalShader {
-    private static final String VERTEX_SHADER =
-            "#version 120\n" +
-            "varying vec3 ViewDirection;\n" +
-            "varying vec3 LocalPosition, BoxLow, BoxHigh;\n" +
-            "varying float ExposedEdges;\n" +
-            "void main() {\n" +
-            "    ViewDirection = (gl_ModelViewMatrix * gl_Vertex).xyz;\n" +
-            "    LocalPosition = gl_Vertex.xyz;\n" +
-            "    ExposedEdges = gl_MultiTexCoord0.w;\n" +
-            "    BoxLow = gl_MultiTexCoord0.xyz; BoxHigh = gl_MultiTexCoord1.xyz;\n" +
-            "    gl_Position = ftransform();\n" +
-            "}\n";
+    private static final ResourceLocation VERTEX_SHADER =
+            new ResourceLocation(AddonMain.MOD_ID, "shaders/over_heaven_portal.vsh");
 
-    private static final String FRAGMENT_SHADER =
-            "#version 120\n" +
-            "uniform vec3 CameraForward, CameraRight, CameraUp;\n" +
-            "uniform float FlowTime, MistRadius;\n" +
-            "uniform vec3 MistOrigin;\n" +
-            "uniform int MistPass;\n" +
-            "// Median sRGB of the supplied lavender swatch, shared by the portal and the mist.\n" +
-            "const vec3 Swatch = vec3(126.0,103.0,219.0)/255.0;\n" +
-            "varying vec3 ViewDirection;\n" +
-            "varying vec3 LocalPosition, BoxLow, BoxHigh;\n" +
-            "\n" +
-            "varying float ExposedEdges;\n" +
-            "const float SmokeTransparency=.60, MistDensity=.17, MistWindSpeed=2.;\n" +
-            "float h3(vec3 p) {\n" +
-            "    p = fract(p*vec3(.1031,.11369,.13787));\n" +
-            "    p += dot(p,p.yzx+19.19);\n" +
-            "    return fract((p.x+p.y)*p.z);\n" +
-            "}\n" +
-            "float n3(vec3 p) {\n" +
-            "    vec3 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);\n" +
-            "    vec4 a=vec4(h3(i),h3(i+vec3(0,1,0)),h3(i+vec3(0,0,1)),h3(i+vec3(0,1,1)));\n" +
-            "    i.x+=1.0;\n" +
-            "    vec4 b=vec4(h3(i),h3(i+vec3(0,1,0)),h3(i+vec3(0,0,1)),h3(i+vec3(0,1,1)));\n" +
-            "    vec4 c=mix(a,b,f.x);\n" +
-            "    return mix(mix(c.x,c.y,f.y),mix(c.z,c.w,f.y),f.z);\n" +
-            "}\n" +
-            "vec3 octave(vec3 p) { return vec3(.8*p.x-.6*p.z,.6*p.x+.8*p.z,p.y)*2.04+vec3(3.3,9.1,4.6); }\n" +
-            "float fb(vec3 p) {\n" +
-            "    float d=.55*n3(p); p=octave(p); d+=.27*n3(p);\n" +
-            "    p=octave(p); d+=.13*n3(p); return d+.05*n3(octave(p));\n" +
-            "}\n" +
-            "vec3 energy(vec3 ray) {\n" +
-            "    vec3 p=ray*3.65 + vec3(3.2,4.5,1.3), drift=vec3(.14,-.21,.105)*FlowTime;\n" +
-            "    vec3 a=p*.83+drift*.42;\n" +
-            "    vec3 turn=vec3(n3(a),n3(a+13.4),n3(a-4.9))-.5;\n" +
-            "    vec3 b=p*1.12+2.75*turn+drift;\n" +
-            "    vec3 roll=vec3(n3(b+5.8),n3(b-11.3),n3(b))-.5;\n" +
-            "    vec3 plume=p+3.4*turn+1.75*roll+drift;\n" +
-            "    float density=fb(plume*1.35), back=fb(plume*.81+ray*.65+17.0);\n" +
-            "    float body=smoothstep(.30,.76,density*.78+back*.22);\n" +
-            "    float light=smoothstep(-.10,.18,density-fb(plume*1.35+vec3(-.19,.27,.15)));\n" +
-            "    float warm=smoothstep(.29,.74,n3(a*.88+turn+7.1));\n" +
-            "    // A slow cloud bank: the gaps between the main eddies are smoke, not a flat swatch.\n" +
-            "    float t=FlowTime;\n" +
-            "    vec3 farP=ray*2.5+vec3(-2.8,6.1,4.7)+vec3(-.032,.049,.023)*t;\n" +
-            "    farP+=1.55*(vec3(n3(farP+3.),n3(farP-5.),n3(farP))-.5);\n" +
-            "    float farD=fb(farP*1.48);\n" +
-            "    // A sideways-drifting veil with its own deformation and a soft, broken edge.\n" +
-            "    vec3 veilP=ray.yzx*4.9+vec3(4.3,-2.7,8.2)+vec3(.065,-.036,.041)*t;\n" +
-            "    veilP+=2.35*(vec3(n3(veilP*.63+7.),n3(veilP*.63),n3(veilP*.63-3.))-.5);\n" +
-            "    float veilD=fb(veilP*1.18+turn*.72);\n" +
-            "    // A finer lilac wisp, sheared differently so it never duplicates the front curl.\n" +
-            "    vec3 silkP=ray.zxy*vec3(7.2,4.3,5.7)+vec3(-3.,2.7,14.)+vec3(-.094,.075,.028)*t;\n" +
-            "    float silk=fb(silkP+2.7*roll+1.6*vec3(veilD,farD,veilD));\n" +
-            "    float shade=.56*smoothstep(.23,.75,farD)+.31*smoothstep(.28,.71,veilD)+.13*smoothstep(.38,.70,silk);\n" +
-            "    vec3 under=mix(Swatch,vec3(172.,150.,250.)/255.,shade);\n" +
-            "    float dye=clamp(.14+.32*warm,0.,1.);\n" +
-            "    vec3 plum=mix(vec3(.35,.13,.43),vec3(.57,.13,.37),dye);\n" +
-            "    vec3 rim=mix(vec3(.74,.47,.76),vec3(.90,.48,.68),dye);\n" +
-            "    // Use a wider, gently warped volume for the plume envelope. Keep the\n" +
-            "    // original curl inside it, but do not light a narrow density contour.\n" +
-            "    vec3 cloud=(p+2.15*turn+.58*roll+drift)*1.13;\n" +
-            "    vec3 axis=vec3(.29,-.19,.21);\n" +
-            "    float mass=.50*fb(cloud)+.25*fb(cloud-axis)+.25*fb(cloud+axis);\n" +
-            "    float cover=smoothstep(.18,.82,mix(mass,density,.18));\n" +
-            "    float scatter=clamp(.15+.66*cover+.18*(back-.5)+.10*(light-.5),0.,1.);\n" +
-            "    vec3 front=mix(plum,rim,scatter);\n" +
-            "    float curl=mix(cover,cover*cover,.21);\n" +
-            "    return mix(under,front,(curl*.91)*(1.-SmokeTransparency));\n" +
-            "}\n" +
-            "// Only soften physical ledges, never an internal chunk/proxy boundary.\n" +
-            "float ledgeDistance(vec3 p) {\n" +
-            "    vec4 mask=mod(floor(floor(ExposedEdges+.5)/vec4(1.,2.,4.,8.)),2.);\n" +
-            "    vec4 dist=vec4(p.x-BoxLow.x,BoxHigh.x-p.x,p.z-BoxLow.z,BoxHigh.z-p.z);\n" +
-            "    vec4 edges=mix(vec4(100.),dist,mask);\n" +
-            "    return min(min(edges.x,edges.y),min(edges.z,edges.w));\n" +
-            "}\n" +
-            "vec4 groundMist() {\n" +
-            "    vec3 dir=normalize(LocalPosition);\n" +
-            "    vec3 inv=1./mix(vec3(.000001),dir,step(vec3(.000001),abs(dir)));\n" +
-            "    vec3 a=BoxLow*inv,b=BoxHigh*inv,lo=min(a,b),hi=max(a,b);\n" +
-            "    float first=max(0.,max(lo.x,max(lo.y,lo.z))),last=min(hi.x,min(hi.y,hi.z));\n" +
-            "    float span=last-first;\n" +
-            "    if(span<=.0001) discard;\n" +
-            "    vec2 accum=vec2(0.);\n" +
-            "    const int mistSteps=6;\n" +
-            "    float stepSize=span/float(mistSteps);\n" +
-            "    for(int i=0;i<mistSteps;++i){\n" +
-            "        vec3 p=dir*(first+(float(i)+.5)*stepSize);\n" +
-            "        float z=clamp((p.y-BoxLow.y)/(BoxHigh.y-BoxLow.y),0.,1.);\n" +
-            "        vec2 pos=p.xz+MistOrigin.xz-vec2(.9578,.2874)*(FlowTime*MistWindSpeed);\n" +
-            "        // Continuous mirrored domain across 8192-block origin rebases.\n" +
-            "        pos=2048.-abs(mod(pos+2048.,8192.)-4096.);\n" +
-            "        // Two overlapping broad fields; no density threshold or sharply cut cloud tops.\n" +
-            "        vec2 g=vec2(.063*pos.x+.019*pos.y,-.036*pos.x+.121*pos.y);\n" +
-            "        float bank=.70*n3(vec3(g,2.3+.12*z))+.30*n3(vec3(g.yx*1.51+vec2(8.7,-4.2),6.1));\n" +
-            "        float prof=(1.-smoothstep(0.,1.,z))*mix(.88,1.12,bank);\n" +
-            "        float mass=mix(.57,1.06,bank)*prof*smoothstep(0.,1.25,ledgeDistance(p));\n" +
-            "        mass*=1.-smoothstep(.66*MistRadius,MistRadius,length(p.xz));\n" +
-            "        accum+=mass*vec2(1.,.25+.55*bank+.12*z);\n" +
-            "    }\n" +
-            "    accum*=stepSize*MistDensity*1.65;\n" +
-            "    vec3 tint=mix(Swatch,vec3(165.,146.,248.)/255.,accum.y/max(accum.x,.0001));\n" +
-            "    return vec4(tint,1.-exp(-accum.x));\n" +
-            "}\n" +
-            "void main() {\n" +
-            "    if (MistPass != 0) { gl_FragColor = groundMist(); return; }\n" +
-            "    vec3 v = normalize(ViewDirection);\n" +
-            "    vec3 ray = normalize(CameraRight*v.x + CameraUp*v.y - CameraForward*v.z);\n" +
-            "    gl_FragColor = vec4(energy(ray),1.0);\n" +
-            "}\n";
+    private static final ResourceLocation FRAGMENT_SHADER =
+            new ResourceLocation(AddonMain.MOD_ID, "shaders/over_heaven_portal.fsh");
 
     private static float forwardX = 0.0F;
     private static float forwardY = 0.0F;
@@ -154,7 +43,7 @@ public final class OverHeavenPortalShader {
     private static float upZ = 0.0F;
 
     private static int program;
-    private static boolean failed;
+    private static volatile boolean reloadPending = true;
     private static int uForward, uRight, uUp, uTime, uPass, uOrigin, uRadius;
     private static int previousFloorProgram;
     private static long startTick = Long.MIN_VALUE;
@@ -219,6 +108,18 @@ public final class OverHeavenPortalShader {
 
 
     private OverHeavenPortalShader() {
+    }
+
+    public static void registerReloadListener() {
+        IReloadableResourceManager manager = (IReloadableResourceManager) Minecraft.getInstance().getResourceManager();
+        ISelectiveResourceReloadListener listener = (resources, types) -> {
+            // EN: Defer OpenGL work until the next draw on the render thread.
+            // 中文：重载只做标记；下一次绘制时才在渲染线程操作 OpenGL。
+            if (types.test(VanillaResourceType.SHADERS)) {
+                reloadPending = true;
+            }
+        };
+        manager.registerReloadListener(listener);
     }
 
     public static void setCamera(ActiveRenderInfo camera) {
@@ -330,19 +231,31 @@ public final class OverHeavenPortalShader {
     }
 
     private static void ensureProgram() {
-        if (program != 0 || failed) {
+        if (!reloadPending) {
+            return;
+        }
+        reloadPending = false;
+
+        IResourceManager resources = Minecraft.getInstance().getResourceManager();
+        String vertexSource;
+        String fragmentSource;
+        try {
+            vertexSource = readShader(resources, VERTEX_SHADER);
+            fragmentSource = readShader(resources, FRAGMENT_SHADER);
+        } catch (IOException failure) {
+            AddonMain.LOGGER.error("Cannot load Over Heaven shader resources", failure);
             return;
         }
 
-        int vertexShader = compileShader(GL20.GL_VERTEX_SHADER, VERTEX_SHADER);
-        int fragmentShader = compileShader(GL20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER);
-        if (vertexShader == 0 || fragmentShader == 0) {
-            if (vertexShader != 0) GL20.glDeleteShader(vertexShader);
-            if (fragmentShader != 0) GL20.glDeleteShader(fragmentShader);
-            failed = true;
+        int vertexShader = compileShader(GL20.GL_VERTEX_SHADER, VERTEX_SHADER, vertexSource);
+        if (vertexShader == 0) {
             return;
         }
-
+        int fragmentShader = compileShader(GL20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER, fragmentSource);
+        if (fragmentShader == 0) {
+            GL20.glDeleteShader(vertexShader);
+            return;
+        }
         int linkedProgram = GL20.glCreateProgram();
         GL20.glAttachShader(linkedProgram, vertexShader);
         GL20.glAttachShader(linkedProgram, fragmentShader);
@@ -355,10 +268,12 @@ public final class OverHeavenPortalShader {
             AddonMain.LOGGER.error("Failed to link Over Heaven floor portal shader: {}",
                     GL20.glGetProgramInfoLog(linkedProgram));
             GL20.glDeleteProgram(linkedProgram);
-            failed = true;
             return;
         }
 
+        // EN: Replace the fallback only after both stages link; broken resource packs must not blank the floor.
+        // 中文：两个阶段链接成功后才替换旧程序；资源包写错时继续显示上一次有效的材质。
+        int previousProgram = program;
         program = linkedProgram;
         uForward = GL20.glGetUniformLocation(program, "CameraForward");
         uRight = GL20.glGetUniformLocation(program, "CameraRight");
@@ -367,15 +282,23 @@ public final class OverHeavenPortalShader {
         uPass = GL20.glGetUniformLocation(program, "MistPass");
         uOrigin = GL20.glGetUniformLocation(program, "MistOrigin");
         uRadius = GL20.glGetUniformLocation(program, "MistRadius");
+        if (previousProgram != 0) {
+            GL20.glDeleteProgram(previousProgram);
+        }
     }
 
-    private static int compileShader(int type, String source) {
+    private static String readShader(IResourceManager resources, ResourceLocation location) throws IOException {
+        try (IResource resource = resources.getResource(location)) {
+            return IOUtils.toString(resource.getInputStream(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static int compileShader(int type, ResourceLocation location, String source) {
         int shader = GL20.glCreateShader(type);
         GL20.glShaderSource(shader, source);
         GL20.glCompileShader(shader);
         if (GL20.glGetShaderi(shader, GL20.GL_COMPILE_STATUS) == GL11.GL_FALSE) {
-            AddonMain.LOGGER.error("Failed to compile Over Heaven floor portal shader: {}",
-                    GL20.glGetShaderInfoLog(shader));
+            AddonMain.LOGGER.error("Failed to compile {}: {}", location, GL20.glGetShaderInfoLog(shader));
             GL20.glDeleteShader(shader);
             return 0;
         }

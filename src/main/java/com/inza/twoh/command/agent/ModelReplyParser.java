@@ -1,11 +1,16 @@
 package com.inza.twoh.command.agent;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 import com.inza.twoh.command.agent.AgentStrings.Wire;
 
@@ -24,11 +29,13 @@ public final class ModelReplyParser {
         public final Kind kind;
         public final String value;
         public final JsonObject arguments;
+        public final List<String> commands;
 
-        private Decision(Kind kind, String value, JsonObject arguments) {
+        private Decision(Kind kind, String value, JsonObject arguments, List<String> commands) {
             this.kind = kind;
             this.value = value;
             this.arguments = arguments;
+            this.commands = commands;
         }
     }
 
@@ -52,13 +59,14 @@ public final class ModelReplyParser {
                     if (!data.has(Wire.ARGUMENTS) || !data.get(Wire.ARGUMENTS).isJsonObject()) {
                         throw new IllegalArgumentException();
                     }
-                    return new Decision(Kind.TOOL, string(data, Wire.NAME), data.getAsJsonObject(Wire.ARGUMENTS));
+                    return new Decision(Kind.TOOL, string(data, Wire.NAME),
+                            data.getAsJsonObject(Wire.ARGUMENTS), Collections.emptyList());
                 case Wire.COMMAND:
                     requireSize(data, 2);
-                    return new Decision(Kind.COMMAND, string(data, Wire.COMMAND), null);
+                    return new Decision(Kind.COMMAND, null, null, commandList(data));
                 case Wire.REPLY:
                     requireSize(data, 2);
-                    return new Decision(Kind.REPLY, string(data, Wire.TEXT), null);
+                    return new Decision(Kind.REPLY, string(data, Wire.TEXT), null, Collections.emptyList());
                 default:
                     throw new IllegalArgumentException();
             }
@@ -83,12 +91,44 @@ public final class ModelReplyParser {
                 object.addProperty(key, reader.nextString());
             } else if (reader.peek() == JsonToken.BEGIN_OBJECT && depth == 0) {
                 object.add(key, readObject(reader, depth + 1));
+            } else if (depth == 0 && Wire.COMMANDS.equals(key) && reader.peek() == JsonToken.BEGIN_ARRAY) {
+                object.add(key, readCommands(reader));
             } else {
                 throw new IllegalArgumentException();
             }
         }
         reader.endObject();
         return object;
+    }
+
+    // EN: Validate every item before any command can reach the server thread.
+    // 中文：先校验整组命令，避免已经执行前几条才发现后面的元素格式不对。
+    private static JsonArray readCommands(JsonReader reader) throws IOException {
+        JsonArray array = new JsonArray();
+        reader.beginArray();
+        while (reader.hasNext()) {
+            if (array.size() >= Wire.MAX_COMMANDS || reader.peek() != JsonToken.STRING) {
+                throw new IllegalArgumentException();
+            }
+            array.add(checkedString(reader.nextString()));
+        }
+        reader.endArray();
+        if (array.size() == 0) {
+            throw new IllegalArgumentException();
+        }
+        return array;
+    }
+
+    private static List<String> commandList(JsonObject data) {
+        JsonElement array = data.get(Wire.COMMANDS);
+        if (array == null || !array.isJsonArray()) {
+            throw new IllegalArgumentException();
+        }
+        List<String> commands = new ArrayList<>(array.getAsJsonArray().size());
+        for (JsonElement item : array.getAsJsonArray()) {
+            commands.add(item.getAsString());
+        }
+        return Collections.unmodifiableList(commands);
     }
 
     static void requireSize(JsonObject object, int expected) {
@@ -102,7 +142,10 @@ public final class ModelReplyParser {
                 || !object.getAsJsonPrimitive(key).isString()) {
             throw new IllegalArgumentException();
         }
-        String value = object.get(key).getAsString();
+        return checkedString(object.get(key).getAsString());
+    }
+
+    private static String checkedString(String value) {
         if (value.trim().isEmpty() || value.chars().anyMatch(Character::isISOControl)) {
             throw new IllegalArgumentException();
         }

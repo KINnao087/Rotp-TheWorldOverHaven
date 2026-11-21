@@ -12,9 +12,15 @@ public final class ConfigDraft {
     public final String replacement;
     public final boolean clearKey;
     public final boolean allowFile;
+    public final int contextTokens;
 
     public ConfigDraft(String id, String provider, String baseUrl, String model,
                        String replacement, boolean clearKey, boolean allowFile) {
+        this(id, provider, baseUrl, model, replacement, clearKey, allowFile, 0);
+    }
+
+    public ConfigDraft(String id, String provider, String baseUrl, String model,
+                       String replacement, boolean clearKey, boolean allowFile, int contextTokens) {
         this.id = id;
         this.provider = provider;
         this.baseUrl = baseUrl;
@@ -22,5 +28,6 @@ public final class ConfigDraft {
         this.replacement = replacement;
         this.clearKey = clearKey;
         this.allowFile = allowFile;
+        this.contextTokens = contextTokens;
     }
 }

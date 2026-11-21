@@ -8,6 +8,7 @@ import com.inza.twoh.command.agent.AgentStrings.Api;
 import com.inza.twoh.command.agent.AgentStrings.Text;
 import com.inza.twoh.command.agent.AgentStrings.Wire;
 import com.inza.twoh.command.agent.entitiy.ModelConfig;
+import com.inza.twoh.command.agent.chat.ChatText;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -34,13 +35,45 @@ public final class ChatApi implements AgentRunner.Model {
         this.apiKey = apiKey;
     }
 
+    @Override
+    public int contextTokens() {
+        return config.effectiveContextTokens();
+    }
+
+    @Override
+    public int inputTokens(JsonArray messages) throws IOException {
+        if (!config.officialOpenAI()) {
+            return AgentRunner.Model.super.inputTokens(messages);
+        }
+        // EN: Ask the selected model's own tokenizer; never forward a proxy's conversation to OpenAI.
+        // 中文：官方模型使用自己的计数端点；代理或本地模型的对话绝不转交给 OpenAI。
+        JsonObject body = new JsonObject();
+        body.addProperty(Wire.MODEL, config.model);
+        body.add(Wire.INPUT, messages);
+        try {
+            int tokens = post(Api.TOKEN_COUNT_PATH, body).get(Wire.INPUT_TOKENS).getAsInt();
+            if (tokens <= 0) {
+                throw new IOException(ChatText.COUNT_ERROR);
+            }
+            return tokens;
+        } catch (IOException | RuntimeException invalid) {
+            throw new IOException(ChatText.COUNT_ERROR, invalid);
+        }
+    }
+
     /**
      * EN: This blocking call belongs on a model worker. Its return value is model text, not authorization to execute.
      * 中文：阻塞调用，只能在模型工作线程上运行。返回模型文本，不代表该命令已获准执行。
      */
     @Override
     public String complete(JsonArray messages) throws IOException {
-        URL endpoint = new URL(config.baseUrl + Api.COMPLETIONS_PATH);
+        JsonObject response = post(Api.COMPLETIONS_PATH, ChatRequestBuilder.build(config, messages));
+        JsonObject choice = response.getAsJsonArray(Wire.CHOICES).get(0).getAsJsonObject();
+        return choice.getAsJsonObject(Wire.MESSAGE).get(Wire.CONTENT).getAsString();
+    }
+
+    private JsonObject post(String path, JsonObject payload) throws IOException {
+        URL endpoint = new URL(config.baseUrl + path);
         HttpURLConnection connection = (HttpURLConnection) endpoint.openConnection();
         try {
             // EN: Disable redirects so player requests and credentials are not forwarded to another endpoint.
@@ -56,7 +89,6 @@ public final class ChatApi implements AgentRunner.Model {
                 connection.setRequestProperty(Api.AUTHORIZATION, Api.BEARER_PREFIX + apiKey);
             }
 
-            JsonObject payload = ChatRequestBuilder.build(config, messages);
             try (OutputStream output = connection.getOutputStream()) {
                 output.write(payload.toString().getBytes(StandardCharsets.UTF_8));
             }
@@ -65,13 +97,13 @@ public final class ChatApi implements AgentRunner.Model {
             if (status != HttpURLConnection.HTTP_OK) {
                 throw new IOException(Text.HTTP_ERROR_PREFIX + status);
             }
-            return readContent(connection);
+            return readResponse(connection);
         } finally {
             connection.disconnect();
         }
     }
 
-    private static String readContent(HttpURLConnection connection) throws IOException {
+    private static JsonObject readResponse(HttpURLConnection connection) throws IOException {
         try (InputStream input = connection.getInputStream();
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[2048];
@@ -85,9 +117,7 @@ public final class ChatApi implements AgentRunner.Model {
                 output.write(buffer, 0, count);
             }
 
-            JsonObject response = new JsonParser().parse(output.toString(StandardCharsets.UTF_8.name())).getAsJsonObject();
-            JsonObject choice = response.getAsJsonArray(Wire.CHOICES).get(0).getAsJsonObject();
-            return choice.getAsJsonObject(Wire.MESSAGE).get(Wire.CONTENT).getAsString();
+            return new JsonParser().parse(output.toString(StandardCharsets.UTF_8.name())).getAsJsonObject();
         }
     }
 }

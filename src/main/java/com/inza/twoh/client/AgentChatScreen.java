@@ -24,8 +24,8 @@ public final class AgentChatScreen extends Screen {
     private TextFieldWidget input;
     private Button send;
     private Button summary;
-    private Button minus;
-    private Button plus;
+    private TextFieldWidget budget;
+    private Button apply;
     private boolean awaiting;
     private int scroll;
 
@@ -40,6 +40,10 @@ public final class AgentChatScreen extends Screen {
             AgentChatScreen screen = (AgentChatScreen) mc.screen;
             screen.view = view;
             screen.awaiting = false;
+            if (!screen.budget.isFocused() || screen.settingsSent) {
+                screen.budget.setValue(Integer.toString(view.window));
+            }
+            screen.settingsSent = false;
             screen.layoutLines();
             screen.updateControls();
         } else if (open) {
@@ -63,8 +67,13 @@ public final class AgentChatScreen extends Screen {
 
         send = button(x + w - 55, bottom, 51, ChatText.SEND, b -> sendMessage());
         summary = button(x + 4, 29, 100, "", b -> configure(!view.summarize, view.window));
-        minus = button(x + w - 53, 29, 22, "−", b -> configure(view.summarize, view.window - 1));
-        plus = button(x + w - 26, 29, 22, "+", b -> configure(view.summarize, view.window + 1));
+        budget = new TextFieldWidget(font, x + w - 123, 30, 74, 16, new StringTextComponent(ChatText.LIMIT));
+        budget.setMaxLength(10);
+        budget.setFilter(text -> text.chars().allMatch(c -> c >= '0' && c <= '9'));
+        budget.setValue(Integer.toString(view.window));
+        children.add(budget);
+        apply = button(x + w - 44, 29, 40, ChatText.APPLY, b -> configure(view.summarize, enteredBudget()));
+        budget.setResponder(value -> updateControls());
         input.setResponder(value -> updateControls());
         layoutLines();
         updateControls();
@@ -74,7 +83,18 @@ public final class AgentChatScreen extends Screen {
         return addButton(new Button(x, y, w, 19, new StringTextComponent(text), action));
     }
 
+    private boolean settingsSent;
+
+    private int enteredBudget() {
+        try {
+            return Integer.parseInt(budget.getValue());
+        } catch (NumberFormatException invalid) {
+            return -1;
+        }
+    }
+
     private void configure(boolean enabled, int window) {
+        settingsSent = true;
         awaiting = true;
         updateControls();
         ChatNetwork.configure(enabled, window);
@@ -99,8 +119,9 @@ public final class AgentChatScreen extends Screen {
         send.active = idle && !input.getValue().trim().isEmpty();
         summary.setMessage(new StringTextComponent(view.summarize ? ChatText.SUMMARY_ON : ChatText.SUMMARY_OFF));
         summary.active = idle;
-        minus.active = idle && view.window > ChatText.MIN_WINDOW;
-        plus.active = idle && view.window < ChatText.MAX_WINDOW;
+        budget.setEditable(idle);
+        int entered = enteredBudget();
+        apply.active = idle && entered >= 0 && entered <= view.maxWindow && entered != view.window;
     }
 
     private int panelWidth() {
@@ -156,6 +177,10 @@ public final class AgentChatScreen extends Screen {
             sendMessage();
             return true;
         }
+        if (budget.isFocused() && apply.active && (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER)) {
+            configure(view.summarize, enteredBudget());
+            return true;
+        }
         return super.keyPressed(key, scanCode, modifiers);
     }
 
@@ -166,17 +191,19 @@ public final class AgentChatScreen extends Screen {
         int w = panelWidth();
         fill(matrices, x, 4, x + w, height - 5, 0xD2171823);
         drawCenteredString(matrices, font, title, width / 2, 10, 0xFFFFFF);
-        font.draw(matrices, ChatText.LIMIT + view.window, x + w - 130, 35, 0xDCDCDC);
+        font.draw(matrices, ChatText.LIMIT, x + w - 128 - font.width(ChatText.LIMIT), 35, 0xDCDCDC);
+        budget.render(matrices, mouseX, mouseY, partialTicks);
         fill(matrices, x + 4, 52, x + w - 4, height - 45, 0xC00D0F18);
         int end = lines.size() - scroll;
         int start = Math.max(0, end - visibleLines());
         for (int i = start; i < end; i++) {
             font.draw(matrices, lines.get(i), x + 9, 56 + (i - start) * (font.lineHeight + 2), 0xFFFFFF);
         }
-        font.draw(matrices, ChatText.HINT, x + 5, height - 41, 0xBCB9C9);
+        String hint = view.maxWindow == 0 ? ChatText.UNKNOWN_LIMIT : ChatText.HINT + view.maxWindow + " token";
+        font.draw(matrices, hint, x + 5, height - 41, 0xBCB9C9);
         input.render(matrices, mouseX, mouseY, partialTicks);
         super.render(matrices, mouseX, mouseY, partialTicks);
-        if (summary.isHovered() || minus.isHovered() || plus.isHovered()) {
+        if (summary.isHovered() || budget.isHovered() || apply.isHovered()) {
             String help = summary.isHovered() ? ChatText.SUMMARY_HELP : ChatText.WINDOW_HELP;
             renderTooltip(matrices, font.split(new StringTextComponent(help), Math.min(w - 20, 210)), mouseX, mouseY);
         }
@@ -185,6 +212,7 @@ public final class AgentChatScreen extends Screen {
     @Override
     public void tick() {
         input.tick();
+        budget.tick();
     }
 
     @Override
