@@ -8,6 +8,7 @@ import com.inza.twoh.init.InitEntities;
 import com.inza.twoh.init.InitSounds;
 import com.inza.twoh.init.InitStands;
 import com.inza.twoh.network.RealityMarkNetwork;
+import com.inza.twoh.network.RiftDestinations;
 import com.inza.twoh.command.agent.config.ConfigNetwork;
 import com.inza.twoh.command.agent.chat.ChatNetwork;
 
@@ -42,6 +43,7 @@ public class AddonMain {
 
     private static void onCommonSetup(FMLCommonSetupEvent event) {
         RealityMarkNetwork.register();
+        RiftDestinations.register();
         ConfigNetwork.register();
         ChatNetwork.register();
     }

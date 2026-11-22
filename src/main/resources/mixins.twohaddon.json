@@ -8,6 +8,8 @@
     "CommandSourceMixin"
   ],
   "client": [
+    "client.SpectatorVisibilityCompatMixin",
+    "client.PortalSceneCaptureMixin",
     "client.RenderTypeMixin",
     "client.WorldRendererMixin"
   ],

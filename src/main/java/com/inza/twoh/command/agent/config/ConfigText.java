@@ -24,19 +24,26 @@ public final class ConfigText {
     public static final String TEST_OK = "模型接口连接测试成功（未保存）。";
     public static final String TEST_FAIL = "模型测试失败，请检查地址、模型名、密钥或超时。";
     public static final String TEST_BUSY = "已有连接测试在进行。";
-    public static final String TITLE = "TWOH · 服务端模型设置";
-    public static final String[] LABELS = {"方案 ID", "供应商", "API 基础地址", "模型名", "新 Key（留空保留）", "上下文 token"};
-    public static final String SELECT = "切换草稿";
-    public static final String NEW = "新建";
-    public static final String SAVE = "保存并应用";
-    public static final String TEST = "测试连接";
-    public static final String CLEAR = "清除密钥";
-    public static final String CONSENT = "允许文件明文存储新 Key";
-    public static final String HAS_KEY = "已设置密钥";
-    public static final String NO_KEY = "无密钥";
-    public static final String ACTIVE = "当前启用：";
-    public static final String ON = "是";
-    public static final String OFF = "否";
+    public static final String TITLE = "gui.twohaddon.config.title";
+    public static final String[] LABELS = {
+            "gui.twohaddon.config.profile",
+            "gui.twohaddon.config.provider",
+            "gui.twohaddon.config.url",
+            "gui.twohaddon.config.model",
+            "gui.twohaddon.config.key",
+            "gui.twohaddon.config.context"
+    };
+    public static final String SELECT = "gui.twohaddon.config.select";
+    public static final String NEW = "gui.twohaddon.config.new";
+    public static final String SAVE = "gui.twohaddon.config.save";
+    public static final String TEST = "gui.twohaddon.config.test";
+    public static final String CLEAR = "gui.twohaddon.config.clear";
+    public static final String CONSENT = "gui.twohaddon.config.consent";
+    public static final String HAS_KEY = "gui.twohaddon.config.has_key";
+    public static final String NO_KEY = "gui.twohaddon.config.no_key";
+    public static final String ACTIVE = "gui.twohaddon.config.active";
+    public static final String ON = "gui.twohaddon.config.on";
+    public static final String OFF = "gui.twohaddon.config.off";
     public static final String PROBE = "Reply OK.";
     public static final int ADMIN_LEVEL = 4;
     public static final int MAX_PROFILES = 32;

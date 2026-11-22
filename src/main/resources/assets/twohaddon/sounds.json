@@ -1,3 +1,10 @@
 {
-  
+  "example_stand_summon_voiceline": {
+    "sounds": [
+      {
+        "name": "jojo:dio_the_world",
+        "type": "event"
+      }
+    ]
+  }
 }

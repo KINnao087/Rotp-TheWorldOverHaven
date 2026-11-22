@@ -1,5 +1,6 @@
 package com.inza.twoh.command.agent.entitiy;
 
+import com.inza.twoh.command.agent.ModelCapabilities;
 import com.inza.twoh.command.agent.config.ConfigText;
 import com.inza.twoh.command.agent.chat.TokenBudget;
 
@@ -51,16 +52,13 @@ public final class ModelConfig {
     }
 
     public boolean officialOpenAI() {
-        return "https://api.openai.com/v1".equalsIgnoreCase(baseUrl);
+        return ModelCapabilities.officialEndpoint(baseUrl);
     }
 
     // EN: A proxy can serve a smaller deployment under the same name. Never guess its capacity from the name.
     // 中文：代理下的同名模型可能有更小的实际上下文，只对官方端点使用已核实的上限。
     public int effectiveContextTokens() {
-        if (officialOpenAI() && "gpt-6-luna".equals(model)) {
-            return contextTokens == 0 ? TokenBudget.LUNA_CONTEXT : Math.min(contextTokens, TokenBudget.LUNA_CONTEXT);
-        }
-        return contextTokens;
+        return ModelCapabilities.contextLimit(this);
     }
 
     private static String text(String value, int max) {

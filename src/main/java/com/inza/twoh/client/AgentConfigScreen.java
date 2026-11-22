@@ -6,6 +6,7 @@ import com.inza.twoh.command.agent.entitiy.ConfigDraft;
 import com.inza.twoh.command.agent.entitiy.ProfileSummary;
 import com.mojang.blaze3d.matrix.MatrixStack;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.I18n;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.gui.widget.button.Button;
@@ -33,7 +34,7 @@ public final class AgentConfigScreen extends Screen {
     private Button consentButton;
 
     private AgentConfigScreen(String active, long revision, List<ProfileSummary> profiles) {
-        super(label(ConfigText.TITLE));
+        super(label(I18n.get(ConfigText.TITLE)));
         this.active = active;
         this.revision = revision;
         this.profiles = profiles;
@@ -65,7 +66,7 @@ public final class AgentConfigScreen extends Screen {
         int[] limits = {48, 48, 512, 128, 2048, 9};
         for (int i = 0; i < fields.length; i++) {
             fields[i] = new TextFieldWidget(font, left + 96, top + 31 + i * 19, span - 96, 16,
-                    label(ConfigText.LABELS[i]));
+                    label(I18n.get(ConfigText.LABELS[i])));
             fields[i].setMaxLength(limits[i]);
             children.add(fields[i]);
         }
@@ -74,13 +75,13 @@ public final class AgentConfigScreen extends Screen {
         fields[5].setFilter(text -> text.chars().allMatch(c -> c >= '0' && c <= '9'));
 
         int half = (span - 4) / 2;
-        button(left, top + 145, half, ConfigText.SELECT, b -> {
+        button(left, top + 145, half, I18n.get(ConfigText.SELECT), b -> {
             if (!profiles.isEmpty()) {
                 selection = (selection + 1) % profiles.size();
                 loadSelection();
             }
         });
-        button(left + half + 4, top + 145, half, ConfigText.NEW, b -> {
+        button(left + half + 4, top + 145, half, I18n.get(ConfigText.NEW), b -> {
             selection = -1;
             loadSelection();
         });
@@ -92,8 +93,8 @@ public final class AgentConfigScreen extends Screen {
             consent = !consent;
             flags();
         });
-        button(left, top + 187, half, ConfigText.TEST, b -> ConfigNetwork.send(draft(), revision, true));
-        button(left + half + 4, top + 187, half, ConfigText.SAVE, b -> ConfigNetwork.send(draft(), revision, false));
+        button(left, top + 187, half, I18n.get(ConfigText.TEST), b -> ConfigNetwork.send(draft(), revision, true));
+        button(left + half + 4, top + 187, half, I18n.get(ConfigText.SAVE), b -> ConfigNetwork.send(draft(), revision, false));
         if (previous == null) {
             loadSelection();
         } else {
@@ -132,8 +133,8 @@ public final class AgentConfigScreen extends Screen {
     }
 
     private void flags() {
-        clearButton.setMessage(label(ConfigText.CLEAR + ": " + (clear ? ConfigText.ON : ConfigText.OFF)));
-        consentButton.setMessage(label(ConfigText.CONSENT + ": " + (consent ? ConfigText.ON : ConfigText.OFF)));
+        clearButton.setMessage(label(I18n.get(ConfigText.CLEAR) + ": " + I18n.get(clear ? ConfigText.ON : ConfigText.OFF)));
+        consentButton.setMessage(label(I18n.get(ConfigText.CONSENT) + ": " + I18n.get(consent ? ConfigText.ON : ConfigText.OFF)));
     }
 
     private Button button(int x, int y, int width, String text, Button.IPressable callback) {
@@ -173,10 +174,10 @@ public final class AgentConfigScreen extends Screen {
         renderBackground(matrices);
         drawCenteredString(matrices, font, title, width / 2, top() + 3, 0xFFFFFF);
         ProfileSummary selected = selection < 0 ? null : profiles.get(selection);
-        String keyState = selected != null && selected.hasKey ? ConfigText.HAS_KEY : ConfigText.NO_KEY;
-        font.draw(matrices, ConfigText.ACTIVE + active + "  |  " + keyState, left(), top() + 20, 0xDCDCDC);
+        String keyState = selected != null && selected.hasKey ? I18n.get(ConfigText.HAS_KEY) : I18n.get(ConfigText.NO_KEY);
+        font.draw(matrices, I18n.get(ConfigText.ACTIVE) + active + "  |  " + keyState, left(), top() + 20, 0xDCDCDC);
         for (int i = 0; i < fields.length; i++) {
-            font.draw(matrices, ConfigText.LABELS[i], left(), top() + 35 + i * 19, 0xEEEEEE);
+            font.draw(matrices, I18n.get(ConfigText.LABELS[i]), left(), top() + 35 + i * 19, 0xEEEEEE);
             fields[i].render(matrices, mouseX, mouseY, partialTicks);
         }
         font.drawWordWrap(label(status), left(), top() + 210, span(), 0xEEEEEE);

@@ -1,0 +1,61 @@
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
+
+// EN: Derive a separate, pinned Forge dependency. Never overwrite the official distribution.
+// 中文：由指定官方版本派生独立的兼容包，不覆盖官方原件。
+def upstream = file('libs/immersive-portals-0.17-mc1.16.5-forge.jar')
+if (!upstream.exists()) {
+    upstream = configurations.detachedConfiguration(
+            dependencies.create('curse.maven:immersive-portals-for-forge-355440:3562072')).singleFile
+}
+def sha = MessageDigest.getInstance('SHA-256').digest(upstream.bytes).encodeHex().toString()
+if (sha != '54d5d70997413bc63f8ad61938595c803d8efccdde1101afeb9e1484babfd189') {
+    throw new GradleException('Unexpected Immersive Portals archive; expected Forge file 3562072.')
+}
+def dir = file('libs/.generated')
+dir.mkdirs()
+def output = new File(dir, 'immersive-portals-rotp-compat-0.17.1.jar')
+def recipe = MessageDigest.getInstance('SHA-256').digest(file('gradle/immersive-portals-compat.gradle').bytes).encodeHex().toString()
+def stamp = new File(dir, output.name + '.recipe')
+if (!output.exists() || !stamp.exists() || stamp.text != recipe) {
+    def tmp = File.createTempFile('ip-rotp-', '.jar', dir)
+    try {
+        new ZipFile(upstream).withCloseable { input ->
+            new ZipOutputStream(tmp.newOutputStream()).withCloseable { zip ->
+                def put = { name, bytes ->
+                    def entry = new ZipEntry(name)
+                    entry.time = 946684800000L
+                    zip.putNextEntry(entry)
+                    zip.write(bytes)
+                    zip.closeEntry()
+                }
+                input.entries().each { item ->
+                    if (!item.isDirectory()) {
+                        byte[] bytes = input.getInputStream(item).withCloseable { it.bytes }
+                        if (item.name == 'imm_ptl_mixins.json' || item.name == 'META-INF/mods.toml') {
+                            String content = new String(bytes,'UTF-8')
+                            String marker = item.name.endsWith('.json') ? '"client.MixinEntity_C",' : 'version="0.14"'
+                            if (content.count(marker) != 1) throw new GradleException('Unexpected IP metadata: '+item.name)
+                            bytes = content.replace(marker, item.name.endsWith('.json') ? '' : 'version="0.17.0-rotp.1"').getBytes('UTF-8')
+                        }
+                        put(item.name, bytes)
+                    }
+                }
+                put('META-INF/TWOH-COMPAT.txt', ('Immersive Portals for Forge by qouteall. Apache License 2.0.\n' +
+                    'Upstream: https://www.curseforge.com/minecraft/mc-mods/immersive-portals-for-forge/files/3562072\n' +
+                    'TWOH compatibility derivative: removed only the conflicting client.MixinEntity_C entry; ' +
+                    'identified this build in mods.toml. The TWOH addon composes its spectator rule with ROTP.\n').getBytes('UTF-8'))
+                put('META-INF/LICENSE-Apache-2.0.txt', file('gradle/LICENSE-Apache-2.0.txt').bytes)
+            }
+        }
+        Files.move(tmp.toPath(), output.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        stamp.text = recipe
+    } finally {
+        if (tmp.exists()) tmp.delete()
+    }
+}
+repositories.flatDir { dirs dir }

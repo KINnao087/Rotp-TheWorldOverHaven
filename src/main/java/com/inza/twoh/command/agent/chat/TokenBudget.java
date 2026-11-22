@@ -11,7 +11,6 @@ import java.nio.charset.StandardCharsets;
 public final class TokenBudget {
     public static final int RESERVE = 1000;
     public static final int DEFAULT_WINDOW = 8192;
-    public static final int LUNA_CONTEXT = 1_050_000;
 
     private TokenBudget() {
     }

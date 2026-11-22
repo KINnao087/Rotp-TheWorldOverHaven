@@ -14,7 +14,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 
 public class InitSounds {
     public static final DeferredRegister<SoundEvent> SOUNDS = DeferredRegister.create(
-            ForgeRegistries.SOUND_EVENTS, AddonMain.MOD_ID); // TODO sounds.json
+            ForgeRegistries.SOUND_EVENTS, AddonMain.MOD_ID);
     
     public static final RegistryObject<SoundEvent> EXAMPLE_STAND_SUMMON_VOICELINE = SOUNDS.register("example_stand_summon_voiceline", 
             () -> new SoundEvent(new ResourceLocation(AddonMain.MOD_ID, "example_stand_summon_voiceline")));

@@ -1,7 +1,5 @@
 package com.inza.twoh.command.agent;
 
-import java.util.regex.Pattern;
-
 /**
  * EN: Shared Mini Agent strings, grouped by the component responsible for them.
  * 中文：Mini Agent 共用的字符串契约，按维护职责分组。
@@ -25,10 +23,6 @@ public final class AgentStrings {
         public static final String KEY_ENV = "TWOH_API_KEY";
         public static final String COMPLETIONS_PATH = "/chat/completions";
         public static final String TOKEN_COUNT_PATH = "/responses/input_tokens";
-        public static final String OPENAI_HOST = "api.openai.com";
-        public static final Pattern GPT6_CHAT_MODEL = Pattern.compile(
-                "(?:openai/)?gpt-6(?:\\.\\d+)?-[^/]+"
-        );
         public static final String POST = "POST";
         public static final String CONTENT_TYPE = "Content-Type";
         public static final String JSON_UTF8 = "application/json; charset=utf-8";

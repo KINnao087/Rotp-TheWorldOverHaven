@@ -26,15 +26,13 @@ displayName="Rotp-TheWorldOverHaven" #mandatory
 #updateJSONURL="https://change.me.example.invalid/updates.json" #optional
 # A URL for the "homepage" for this mod, displayed in the mod UI
 #displayURL="https://change.me.to.your.mods.homepage.example.invalid/" #optional
-# A file name (in the root of the mod JAR) containing a logo for display
-logoFile="examplemod.png" #optional
 # A text field displayed in the mod UI
-credits="StandoByte, " #optional
+credits="StandoByte" #optional
 # A text field displayed in the mod UI
 authors="Inza" #optional
 # The description text for the mod (multi line!) (#mandatory)
 description='''
-A template for making Stand addons for Ripples of the Past mod.
+Adds The World Over Heaven, the Over Heaven dimension, and drawable spatial rifts to Ripples of the Past.
 '''
 # A dependency - use the . to indicate dependency for a specific modid. Dependencies are optional.
 [[dependencies.twohaddon]] #optional
@@ -55,6 +53,13 @@ A template for making Stand addons for Ripples of the Past mod.
 # This version range declares a minimum of the current minecraft version up to but not including the next major version
     versionRange="[1.16.5,1.17)"
     ordering="NONE"
+    side="BOTH"
+[[dependencies.twohaddon]]
+    modId="immersive_portals"
+    mandatory=true
+    # The stock 0.17 file conflicts with ROTP's spectator redirect.
+    versionRange="[0.17.0-rotp.1]"
+    ordering="AFTER"
     side="BOTH"
 [[dependencies.twohaddon]]
     modId="jojo"

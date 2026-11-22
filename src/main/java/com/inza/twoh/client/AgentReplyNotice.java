@@ -4,6 +4,7 @@ import com.inza.twoh.AddonMain;
 import com.inza.twoh.command.agent.chat.ChatText;
 import com.mojang.blaze3d.matrix.MatrixStack;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.I18n;
 import net.minecraft.client.gui.AbstractGui;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.network.NetworkManager;
@@ -128,7 +129,7 @@ public final class AgentReplyNotice {
         matrices.translate(0, 0, 400);
         AbstractGui.fill(matrices, left, top, right, bottom, 0xF0211E2D);
         AbstractGui.fill(matrices, left, top, left + 2, bottom, 0xFFB68BF2);
-        font.draw(matrices, ChatText.NOTIFICATION_TITLE, left + PADDING, top + PADDING, 0xE0C8FF);
+        font.draw(matrices, I18n.get(ChatText.NOTIFICATION_TITLE), left + PADDING, top + PADDING, 0xE0C8FF);
         if (lines.size() > perPage) {
             String pages = (firstLine / perPage + 1) + "/" + ((lines.size() + perPage - 1) / perPage);
             font.draw(matrices, pages, right - PADDING - font.width(pages), top + PADDING, 0xBAAEC9);

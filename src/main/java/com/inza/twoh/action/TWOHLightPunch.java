@@ -16,7 +16,9 @@ public class TWOHLightPunch extends StandEntityLightAttack {
     @Override
     public StandEntityPunch punchEntity(StandEntity stand, Entity target, StandEntityDamageSource dmgSource) {
 
-        if (!(target instanceof LivingEntity)) return super.punchEntity(stand, target, dmgSource);
+        if (!(target instanceof LivingEntity)) {
+            return super.punchEntity(stand, target, dmgSource);
+        }
 
         RealityMarkManager.applyMark(stand.getUser(), (LivingEntity) target, 10000, 1);
         return super.punchEntity(stand, target, dmgSource);

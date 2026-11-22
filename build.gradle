@@ -5,13 +5,21 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '5.1.+', changing: true
+        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '5.1.77'
         classpath 'org.spongepowered:mixingradle:0.7-SNAPSHOT'
     }
 }
 apply plugin: 'net.minecraftforge.gradle'
 apply plugin: 'org.spongepowered.mixin'
-// Only edit below this line, the above code adds and enables the necessary things for Forge to be setup.
+// EN: The legacy MixinGradle plugin has a moving snapshot coordinate; reject different bytes.
+// 中文：旧版 MixinGradle 以快照发布；校验已验证的原件，防止静默切换版本。
+def mixinPlugin = buildscript.configurations.classpath.resolvedConfiguration.resolvedArtifacts.find {
+    it.moduleVersion.id.group == 'org.spongepowered' && it.name == 'mixingradle'
+}
+def mixinDigest = java.security.MessageDigest.getInstance('SHA-256').digest(mixinPlugin.file.bytes).encodeHex().toString()
+if (mixinDigest != '61d4dd3a40eeaf126ac9c5ffdea74c284dfcb34a38baa256f7c99d023a0a04a9') {
+    throw new GradleException('Unexpected MixinGradle snapshot: ' + mixinDigest)
+}
 apply plugin: 'eclipse'
 apply plugin: 'maven-publish'
 
@@ -64,7 +72,7 @@ minecraft {
             property 'forge.logging.console.level', 'debug'
 
             mods {
-                examplemod {
+                twohaddon {
                     source sourceSets.main
                 }
             }
@@ -86,7 +94,7 @@ minecraft {
             property 'forge.logging.console.level', 'debug'
 
             mods {
-                examplemod {
+                twohaddon {
                     source sourceSets.main
                 }
             }
@@ -108,10 +116,10 @@ minecraft {
             property 'forge.logging.console.level', 'debug'
 
             // Specify the modid for data generation, where to output the resulting resource, and where to look for existing resources.
-            args '--mod', 'examplemod', '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+            args '--mod', 'twohaddon', '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
 
             mods {
-                examplemod {
+                twohaddon {
                     source sourceSets.main
                 }
             }
@@ -128,6 +136,10 @@ repositories {
         url = 'https://repo.spongepowered.org/repository/maven-public/'
     }
     maven {
+        url = uri('https://www.cursemaven.com')
+        content { includeGroup 'curse.maven' }
+    }
+    maven {
         name "RotP Maven"
         url 'https://raw.githubusercontent.com/StandoByte/RotP-maven/main'
     }
@@ -135,6 +147,8 @@ repositories {
         dirs 'libs'
     }
 }
+
+apply from: 'gradle/immersive-portals-compat.gradle'
 
 mixin {
     add sourceSets.main, 'twohaddon.refmap.json'
@@ -165,8 +179,9 @@ dependencies {
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
 
-	implementation fg.deobf('local:JJBA-RipplesOfThePast:1.16.5-0.2.2.2')
-	compileOnly 'team.unnamed:mocha:3.0.0'
+    implementation fg.deobf("local:JJBA-RipplesOfThePast:${main_mod_version}")
+    implementation fg.deobf('local:immersive-portals-rotp-compat:0.17.1')
+    compileOnly 'team.unnamed:mocha:3.0.0'
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
@@ -174,12 +189,12 @@ dependencies {
 jar {
     manifest {
         attributes([
-            "Specification-Title": "examplemod",
-            "Specification-Vendor": "examplemodsareus",
+            "Specification-Title": "twohaddon",
+            "Specification-Vendor": "Inza",
             "Specification-Version": "1", // We are version 1 of ourselves
             "Implementation-Title": project.name,
             "Implementation-Version": "${version}",
-            "Implementation-Vendor" :"examplemodsareus",
+            "Implementation-Vendor" :"Inza",
             "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
             "MixinConfigs": "mixins.twohaddon.json"
         ])

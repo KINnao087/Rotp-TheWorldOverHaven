@@ -14,6 +14,8 @@ import com.inza.twoh.action.TWOHBlock;
 import com.inza.twoh.action.TWOHFinisherPunch;
 import com.inza.twoh.action.TWOHHeavyPunch;
 import com.inza.twoh.action.TWOHLightPunch;
+import com.inza.twoh.action.TWOHSpatialRift;
+import com.github.standobyte.jojo.entity.stand.StandPose;
 import com.inza.twoh.entity.TheWorldOverHavenStandEntity;
 
 import net.minecraftforge.fml.RegistryObject;
@@ -53,6 +55,14 @@ public class InitStands {
     
     public static final RegistryObject<TWOHBlock> TWOH_STAND_BLOCK = ACTIONS.register("example_stand_block", 
             () -> new TWOHBlock());
+
+    public static final RegistryObject<TWOHSpatialRift> TWOH_SPATIAL_RIFT = ACTIONS.register(
+            "twoh_spatial_rift",
+            () -> new TWOHSpatialRift(new TWOHSpatialRift.Builder()
+                    .autoSummonStand()
+                    .standPose(StandPose.RANGED_ATTACK)
+                    .holdToFire(1, true)
+                    .partsRequired(StandPart.ARMS)));
     
 
     // ...then create the Stand type instance. Moves, stats, entity sizes, and a few other things are determined here.
@@ -67,7 +77,8 @@ public class InitStands {
                             TWOH_STAND_BARRAGE.get()
                             )
                     .rightClickHotbar(
-                            TWOH_STAND_BLOCK.get()
+                            TWOH_STAND_BLOCK.get(),
+                            TWOH_SPATIAL_RIFT.get()
                             )
                     .defaultStats(StandStats.class, new StandStats.Builder()
                             .tier(6)

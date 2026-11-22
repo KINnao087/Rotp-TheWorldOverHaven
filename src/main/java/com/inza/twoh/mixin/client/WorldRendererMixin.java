@@ -1,7 +1,7 @@
 package com.inza.twoh.mixin.client;
 
 import com.inza.twoh.client.render.OverHeavenRenderTypes;
-import com.inza.twoh.client.render.OverHeavenPortalShader;
+import com.inza.twoh.client.render.fx.EffectRenderer;
 import com.mojang.blaze3d.matrix.MatrixStack;
 
 import net.minecraft.client.renderer.ActiveRenderInfo;
@@ -27,9 +27,10 @@ public abstract class WorldRendererMixin {
             boolean renderBlockOutline, ActiveRenderInfo activeRenderInfo, GameRenderer gameRenderer,
             LightTexture lightTexture, Matrix4f projectionMatrix, CallbackInfo ci) {
         Vector3d cameraPos = activeRenderInfo.getPosition();
-        OverHeavenPortalShader.setCamera(activeRenderInfo);
+        EffectRenderer.beginFrame(activeRenderInfo, partialTicks, matrixStack.last().pose(), projectionMatrix);
         for (RenderType renderType : OverHeavenRenderTypes.OVER_HEAVEN_FLOOR_LAYERS) {
             renderChunkLayer(renderType, matrixStack, cameraPos.x, cameraPos.y, cameraPos.z);
         }
+        EffectRenderer.finishPortalFrame();
     }
 }
