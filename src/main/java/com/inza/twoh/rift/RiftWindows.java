@@ -114,8 +114,8 @@ public final class RiftWindows {
             window.teleportChangesScale = false;
         }
         RiftPlane plane = anchor.stroke().plane;
-        Vector3d origin = anchor.position().add(plane.center);
-        Vector3d remote = exit.add(plane.center);
+        Vector3d origin = anchor.position();
+        Vector3d remote = exit;
         Vector3d right = side == 0 ? plane.horizontal : plane.horizontal.scale(-1);
         GeometryPortalShape shape = side == 0 ? mask.front : mask.back;
         double width = 2 * mask.boundX + .02;

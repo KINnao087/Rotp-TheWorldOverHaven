@@ -5,13 +5,19 @@
   "compatibilityLevel": "JAVA_8",
   "refmap": "twohaddon.refmap.json",
   "mixins": [
-    "CommandSourceMixin"
+    "CommandSourceMixin",
+    "TimeStopVisualSyncMixin"
   ],
   "client": [
     "client.SpectatorVisibilityCompatMixin",
     "client.PortalSceneCaptureMixin",
     "client.RenderTypeMixin",
-    "client.WorldRendererMixin"
+    "client.WorldRendererMixin",
+    "client.TimeStopOwnerMixin",
+    "client.TimeStopPacketId",
+    "client.TimeStopPacketVisualMixin",
+    "client.TimeStopPassMixin",
+    "client.TimeStopRangeAccessor"
   ],
   "server": [
   ],

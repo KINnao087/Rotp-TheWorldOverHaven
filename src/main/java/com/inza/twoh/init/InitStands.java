@@ -78,7 +78,8 @@ public class InitStands {
                             )
                     .rightClickHotbar(
                             TWOH_STAND_BLOCK.get(),
-                            TWOH_SPATIAL_RIFT.get()
+                            TWOH_SPATIAL_RIFT.get(),
+                            ModStandsInit.THE_WORLD_TIME_STOP.get()
                             )
                     .defaultStats(StandStats.class, new StandStats.Builder()
                             .tier(6)

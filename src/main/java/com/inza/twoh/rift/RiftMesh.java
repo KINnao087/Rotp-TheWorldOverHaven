@@ -164,7 +164,7 @@ public final class RiftMesh {
         int cells = (xs.length - 1) * (ys.length - 1);
         int[] groups = new int[cells], labels = new int[cells];
         Random rng = new Random(seed);
-        labelCells(pen, aperture, xs, ys, groups, labels, rng);
+        labelCells(aperture, xs, ys, groups, labels, rng);
         List<Mass> masses = groupMasses(xs, ys, groups, labels);
         List<Face> fs = new ArrayList<>();
         List<Edge> es = new ArrayList<>();
@@ -174,27 +174,33 @@ public final class RiftMesh {
         edges = es.toArray(new Edge[0]);
     }
 
-    private void labelCells(RiftStroke pen, RiftAperture aperture, float[] xs, float[] ys,
+    private void labelCells(RiftAperture aperture, float[] xs, float[] ys,
                             int[] groups, int[] labels, Random rng) {
         int w = xs.length - 1, h = ys.length - 1;
         float phase = rng.nextFloat() * 6.28F;
         List<Site> sites = new ArrayList<>();
-        for (float x = xs[0] - .5F; x < xs[w] + .9F; x += .75F) {
-            for (float y = ys[0] - .5F; y < ys[h] + .9F; y += .75F) {
+        float spacing = Math.max(.75F, aperture.maxRadius() * .3F);
+        for (float x = xs[0] - .5F; x < xs[w] + .9F; x += spacing) {
+            for (float y = ys[0] - .5F; y < ys[h] + .9F; y += spacing) {
                 sites.add(new Site(x + rng.nextFloat() * .48F, y + rng.nextFloat() * .48F));
             }
         }
         float cell = aperture.cellSize();
+        int[] coarseGroups = new int[w];
+        int previousRow = Integer.MIN_VALUE;
         for (int j = 0; j < h; j++) {
+            float y = (ys[j] + ys[j + 1]) * .5F;
+            int row = (int) Math.floor(y / cell);
+            float cy = (row + .5F) * cell;
             for (int i = 0; i < w; i++) {
                 int k = j * w + i;
-                float x = (xs[i] + xs[i + 1]) * .5F, y = (ys[j] + ys[j + 1]) * .5F;
+                float x = (xs[i] + xs[i + 1]) * .5F;
                 // EN: The coarse mask and ownership are piecewise constant on Minecraft-style square cells.
                 // 中文：开口和归属按方格取值，不产生斜切边；主裂纹的细边另行精确切分。
                 float cx = ((float) Math.floor(x / cell) + .5F) * cell;
-                float cy = ((float) Math.floor(y / cell) + .5F) * cell;
-                Near n = nearest(pen, cx, cy);
-                float radius = aperture.radius(n.t, phase);
+                if (row != previousRow) {
+                    coarseGroups[i] = aperture.covers(cx, cy, phase) ? nearestSite(sites, cx, cy) : 0;
+                }
                 boolean lip = false;
                 for (Slot s : slots) {
                     if (s.contains(x, y)) {
@@ -206,21 +212,26 @@ public final class RiftMesh {
                     labels[k] = -1;
                     continue;
                 }
-                if (n.d > radius) {
-                    continue;
-                }
-                float best = Float.MAX_VALUE;
-                for (int b = 0; b < sites.size(); b++) {
-                    Site s = sites.get(b);
-                    float dx = cx - s.x, dy = cy - s.y;
-                    float d = dx * dx + dy * dy;
-                    if (d < best) {
-                        best = d;
-                        groups[k] = b + 1;
-                    }
-                }
+                groups[k] = coarseGroups[i];
+            }
+            previousRow = row;
+        }
+    }
+
+    private static int nearestSite(List<Site> sites, float x, float y) {
+        int group = 0;
+        float best = Float.MAX_VALUE;
+        for (int i = 0; i < sites.size(); i++) {
+            Site site = sites.get(i);
+            float dx = x - site.x;
+            float dy = y - site.y;
+            float squared = dx * dx + dy * dy;
+            if (squared < best) {
+                best = squared;
+                group = i + 1;
             }
         }
+        return group;
     }
 
     private static List<Mass> groupMasses(float[] xs, float[] ys, int[] groups, int[] labels) {

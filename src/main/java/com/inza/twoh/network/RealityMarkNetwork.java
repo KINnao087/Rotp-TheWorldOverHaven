@@ -1,16 +1,19 @@
 package com.inza.twoh.network;
 
 import com.inza.twoh.AddonMain;
+import com.inza.twoh.network.packet.CastVisualPacket;
 import com.inza.twoh.network.packet.RealityMarkVfxPacket;
 
 import net.minecraft.entity.Entity;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.fml.network.NetworkRegistry;
+import net.minecraftforge.fml.network.NetworkDirection;
 import net.minecraftforge.fml.network.PacketDistributor;
 import net.minecraftforge.fml.network.simple.SimpleChannel;
+import java.util.Optional;
 
 public final class RealityMarkNetwork {
-    private static final String PROTOCOL_VERSION = "1";
+    private static final String PROTOCOL_VERSION = "3";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(AddonMain.MOD_ID, "main"),
@@ -35,6 +38,8 @@ public final class RealityMarkNetwork {
                 RealityMarkVfxPacket::decode,
                 RealityMarkVfxPacket::handle);
 
+        CHANNEL.registerMessage(nextPacketId(), CastVisualPacket.class, CastVisualPacket::write,
+                CastVisualPacket::read, CastVisualPacket::receive, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         registered = true;
     }
 

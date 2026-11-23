@@ -293,8 +293,6 @@ public final class SpatialRiftEntity extends Entity implements IEntityAdditional
         buffer.writeLong(seed);
         buffer.writeBoolean(draft);
         buffer.writeFloat(yRot);
-        // EN: The initial plane pitch is part of the stroke, even before the first grid step.
-        // 中文：第一格尚未画出时，客户端也必须收到落笔俯仰角，否则描边会错到水平面上。
         buffer.writeNbt(stroke.pack());
     }
 
