@@ -1,7 +1,8 @@
 package com.inza.twoh.client.render.fx;
 
 import com.inza.twoh.AddonMain;
-import com.qouteall.immersive_portals.render.context_management.PortalRendering;
+import com.inza.twoh.client.render.FloorSurface;
+import com.inza.twoh.portalcore.immersive_portals.render.context_management.PortalRendering;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ActiveRenderInfo;
 import net.minecraft.client.world.ClientWorld;
@@ -124,13 +125,13 @@ public final class EffectRenderer {
         EffectFrame remote = portalFrame;
         try {
             List<Supplier<? extends ClientEffect>> factories = AMBIENT.get(remote.world.dimension());
-            if (factories == null) {
-                return;
-            }
+            FloorSurface.submit(remote, portalQueue);
             List<ClientEffect> effects = portalAmbient.computeIfAbsent(remote.world, world -> {
                 List<ClientEffect> result = new ArrayList<>();
-                for (Supplier<? extends ClientEffect> factory : factories) {
-                    result.add(factory.get());
+                if (factories != null) {
+                    for (Supplier<? extends ClientEffect> factory : factories) {
+                        result.add(factory.get());
+                    }
                 }
                 return result;
             });
@@ -179,6 +180,7 @@ public final class EffectRenderer {
         }
         activatePending();
         try {
+            FloorSurface.submit(frame, queue);
             for (ClientEffect effect : active) {
                 effect.submit(frame, queue);
             }

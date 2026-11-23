@@ -1,0 +1,148 @@
+// Adapted from Immersive Portals Forge (Apache-2.0): internal namespace, official mappings and chunk provider selection.
+package com.inza.twoh.portalcore.hiding_in_the_bushes;
+
+import com.inza.twoh.portalcore.immersive_portals.Global;
+import com.inza.twoh.portalcore.immersive_portals.Helper;
+import com.inza.twoh.portalcore.immersive_portals.McHelper;
+import com.inza.twoh.portalcore.immersive_portals.chunk_loading.MyClientChunkManager;
+import com.inza.twoh.portalcore.immersive_portals.portal.custom_portal_gen.PortalGenInfo;
+import com.inza.twoh.portalcore.immersive_portals.portal.nether_portal.BlockPortalShape;
+import com.inza.twoh.portalcore.immersive_portals.portal.nether_portal.NetherPortalGeneration;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
+import net.minecraft.client.multiplayer.ClientChunkProvider;
+import net.minecraft.client.world.ClientWorld;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.ServerPlayerEntity;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.util.RegistryKey;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.IWorld;
+import net.minecraft.world.World;
+import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.server.ServerWorld;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.world.BlockEvent;
+import net.minecraftforge.fml.ModList;
+import net.minecraftforge.fml.loading.FMLEnvironment;
+
+import com.inza.twoh.portalcore.client.EmbeddiumRiftChunks;
+
+
+public class O_O {
+    public static boolean isForge() {
+        return true;
+    }
+    
+    @OnlyIn(Dist.CLIENT)
+    public static void onPlayerChangeDimensionClient(
+        RegistryKey<World> from, RegistryKey<World> to
+    ) {
+    
+    }
+    
+    @OnlyIn(Dist.CLIENT)
+    public static void segregateClientEntity(
+        ClientWorld fromWorld,
+        Entity entity
+    ) {
+        ((IEClientWorld_MA) fromWorld).removeEntityWhilstMaintainingCapability(entity);
+        entity.revive();
+    }
+    
+    public static void segregateServerEntity(
+        ServerWorld fromWorld,
+        Entity entity
+    ) {
+        fromWorld.removeEntity(entity, true);
+        entity.revive();
+    }
+    
+    public static void segregateServerPlayer(
+        ServerWorld fromWorld,
+        ServerPlayerEntity player
+    ) {
+        fromWorld.removePlayer(player, true);
+        player.revive();
+    }
+    
+    public static void onPlayerTravelOnServer(
+        ServerPlayerEntity player,
+        RegistryKey<World> from,
+        RegistryKey<World> to
+    ) {
+        Global.serverTeleportationManager.isFiringMyChangeDimensionEvent = true;
+        net.minecraftforge.fml.hooks.BasicEventHooks.firePlayerChangedDimensionEvent(
+            player, from, to
+        );
+        Global.serverTeleportationManager.isFiringMyChangeDimensionEvent = false;
+    }
+    
+    public static void loadConfigFabric() {
+        //nothing
+    }
+    
+    public static void onServerConstructed() {
+        ModMainForge.applyServerConfigs();
+    }
+    
+    public static boolean isObsidian(BlockState blockState) {
+        return blockState.getBlock() == Blocks.OBSIDIAN;
+//        return blockState.isPortalFrame(DummyWorldReader.instance, BlockPos.ZERO);
+    }
+    
+    public static final boolean isReachEntityAttributesPresent = false;
+    
+    public static boolean detectOptiFine() {
+        try {
+            //do not load other optifine classes that loads vanilla classes
+            //that would load the class before mixin
+            Class.forName("optifine.ZipResourceProvider");
+            return true;
+        }
+        catch (ClassNotFoundException e) {
+            return false;
+        }
+    }
+    
+    public static void postClientChunkUnloadEvent(Chunk chunk) {
+        net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+            new net.minecraftforge.event.world.ChunkEvent.Unload(chunk)
+        );
+    }
+    
+    public static void postClientChunkLoadEvent(Chunk chunk) {
+        net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(
+            new net.minecraftforge.event.world.ChunkEvent.Load(chunk)
+        );
+    }
+    
+    public static boolean isDedicatedServer() {
+        return FMLEnvironment.dist == Dist.DEDICATED_SERVER;
+    }
+    
+    public static void postPortalSpawnEventForge(PortalGenInfo info) {
+        ServerWorld world = McHelper.getServer().getLevel(info.from);
+        BlockPortalShape shape = info.fromShape;
+        
+        MinecraftForge.EVENT_BUS.post(
+            new BlockEvent.PortalSpawnEvent(
+                world,
+                shape.anchor,
+                world.getBlockState(shape.anchor),
+                null
+            )
+        );
+    }
+    
+    @OnlyIn(Dist.CLIENT)
+    public static ClientChunkProvider createMyClientChunkManager(
+        ClientWorld world, int dis
+    ) {
+        return ModList.get().isLoaded("embeddium")
+            ? EmbeddiumRiftChunks.create(world, dis) : new MyClientChunkManager(world, dis);
+    }
+}

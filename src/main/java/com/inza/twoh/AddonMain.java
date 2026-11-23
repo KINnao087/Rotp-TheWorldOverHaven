@@ -1,6 +1,7 @@
 package com.inza.twoh;
 
 import com.inza.twoh.init.InitBlock;
+import com.inza.twoh.portalcore.immersive_portals.ModMain;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,6 +43,7 @@ public class AddonMain {
     }
 
     private static void onCommonSetup(FMLCommonSetupEvent event) {
+        event.enqueueWork(ModMain::init);
         RealityMarkNetwork.register();
         RiftDestinations.register();
         ConfigNetwork.register();

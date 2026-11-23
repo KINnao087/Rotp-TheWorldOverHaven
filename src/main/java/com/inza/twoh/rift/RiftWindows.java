@@ -3,9 +3,10 @@ package com.inza.twoh.rift;
 import com.inza.twoh.entity.RiftWindow;
 import com.inza.twoh.entity.SpatialRiftEntity;
 import com.inza.twoh.init.InitEntities;
-import com.qouteall.immersive_portals.api.PortalAPI;
-import com.qouteall.immersive_portals.portal.GeometryPortalShape;
-import com.qouteall.immersive_portals.portal.GeometryPortalShape.TriangleInPlane;
+import com.inza.twoh.rift.portal.RiftAperture;
+import com.inza.twoh.portalcore.immersive_portals.api.PortalAPI;
+import com.inza.twoh.portalcore.immersive_portals.portal.GeometryPortalShape;
+import com.inza.twoh.portalcore.immersive_portals.portal.GeometryPortalShape.TriangleInPlane;
 import net.minecraft.util.math.vector.Vector3d;
 import net.minecraft.world.server.ServerWorld;
 
@@ -14,10 +15,6 @@ import java.util.BitSet;
 /** EN: Two faces at one endpoint. The same triangle mask drives remote rendering and crossing.
  * 中文：每端各有正反两面；彼端世界渲染和穿越检测使用完全相同的三角形遮罩。 */
 public final class RiftWindows {
-    // EN: IP 0.17 rejects the entire mask if any triangle has area <= 0.001 square blocks.
-    // 中文：在 IP 0.17 中，只要有一个三角形面积不超过 0.001 平方格，整张遮罩就会失效。
-    private static final double MIN_TRIANGLE_AREA = 0.001D;
-
     private final SpatialRiftEntity anchor;
     private final ServerWorld destination;
     private final String pairTag;
@@ -67,7 +64,7 @@ public final class RiftWindows {
     private void update(RiftMesh.Slot[] slots, RiftMesh.Face[] plates, float gap, boolean pass) {
         slit = gap;
         travel = pass;
-        Mask mask = new Mask();
+        RiftAperture mask = new RiftAperture();
         for (RiftMesh.Slot slot : slots) {
             float low = (1 - gap) * .5F;
             float a = (low - slot.first) / (slot.last - slot.first);
@@ -92,7 +89,7 @@ public final class RiftWindows {
                 }
             }
         }
-        if (mask.front.triangles.isEmpty()) {
+        if (mask.triangles().isEmpty()) {
             close();
             return;
         }
@@ -101,7 +98,7 @@ public final class RiftWindows {
         }
     }
 
-    private RiftWindow sync(RiftWindow window, Mask mask, int side, boolean pass) {
+    private RiftWindow sync(RiftWindow window, RiftAperture mask, int side, boolean pass) {
         boolean fresh = window == null || !window.isAlive();
         if (fresh) {
             window = new RiftWindow(InitEntities.RIFT_WINDOW.get(), anchor.level);
@@ -117,9 +114,9 @@ public final class RiftWindows {
         Vector3d origin = anchor.position();
         Vector3d remote = exit;
         Vector3d right = side == 0 ? plane.horizontal : plane.horizontal.scale(-1);
-        GeometryPortalShape shape = side == 0 ? mask.front : mask.back;
-        double width = 2 * mask.boundX + .02;
-        double height = 2 * mask.boundY + .02;
+        GeometryPortalShape shape = toPortalShape(mask, side != 0);
+        double width = mask.width();
+        double height = mask.height();
         // EN: Sync only a changed mask, endpoint or travel state.
         // 中文：仅在遮罩、端点位置或通行状态变化时同步。
         if (!fresh && window.teleportable == pass && window.hasCrossPortalCollision == pass
@@ -158,28 +155,15 @@ public final class RiftWindows {
         return true;
     }
 
-    // EN: IP expects a 2D mask in each portal's own plane. Mirroring X produces its reverse face.
-    // 中文：直接使用绘制平面的局部坐标；镜像横坐标得到反面的遮罩。
-    private static final class Mask {
-        final GeometryPortalShape front = new GeometryPortalShape();
-        final GeometryPortalShape back = new GeometryPortalShape();
-        double boundX, boundY;
-
-        void quad(double x, double y, double u, double v) {
-            triangle(x, y, u, y, u, v);
-            triangle(u, v, x, v, x, y);
+    // EN: Convert to the legacy renderer's triangle format only at this boundary.
+    // 中文：只在这个接口把原生开口转换成旧渲染器的三角形格式。
+    private static GeometryPortalShape toPortalShape(RiftAperture mask, boolean reverse) {
+        GeometryPortalShape result = new GeometryPortalShape();
+        double sign = reverse ? -1 : 1;
+        for (RiftAperture.Triangle t : mask.triangles()) {
+            result.triangles.add(new TriangleInPlane(sign * t.ax, t.ay, sign * t.bx, t.by, sign * t.cx, t.cy));
         }
-
-        void triangle(double x, double y, double u, double v, double s, double t) {
-            TriangleInPlane tri = new TriangleInPlane(x, y, u, v, s, t);
-            if (tri.getArea() <= MIN_TRIANGLE_AREA) {
-                return;
-            }
-            front.triangles.add(tri);
-            back.triangles.add(new TriangleInPlane(-x, y, -u, v, -s, t));
-            boundX = Math.max(boundX, Math.max(Math.abs(x), Math.max(Math.abs(u), Math.abs(s))));
-            boundY = Math.max(boundY, Math.max(Math.abs(y), Math.max(Math.abs(v), Math.abs(t))));
-        }
+        return result;
     }
 
     public void close() {

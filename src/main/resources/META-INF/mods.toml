@@ -55,13 +55,6 @@ Adds The World Over Heaven, the Over Heaven dimension, and drawable spatial rift
     ordering="NONE"
     side="BOTH"
 [[dependencies.twohaddon]]
-    modId="immersive_portals"
-    mandatory=true
-    # The stock 0.17 file conflicts with ROTP's spectator redirect.
-    versionRange="[0.17.0-rotp.1]"
-    ordering="AFTER"
-    side="BOTH"
-[[dependencies.twohaddon]]
     modId="jojo"
     mandatory=true
     versionRange="[0.2.2,0.3)"

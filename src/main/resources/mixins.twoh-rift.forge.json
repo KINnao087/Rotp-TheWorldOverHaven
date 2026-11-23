@@ -1,0 +1,25 @@
+{
+  "required": true,
+  "package": "com.inza.twoh.portalcore.hiding_in_the_bushes.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "refmap": "twoh-rift.refmap.json",
+  "mixins": [
+    "common.MixinContainerMinecartEntity",
+    "common.MixinPlayerManager_MA",
+    "common.MixinServerPlayerEntity_MA"
+  ],
+  "client": [
+    "client.MixinChunkRender",
+    "client.MixinChunkRenderDispatcher",
+    "client.MixinChunkRenderTask",
+    "client.MixinClientWorld_MA",
+    "client.MixinForgeBlockModelRenderer",
+    "client.MixinForgeModelDataManager",
+    "client.MixinParticleManager_Forge",
+    "client.MixinRebuildTask"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "minVersion": "0.8"
+}

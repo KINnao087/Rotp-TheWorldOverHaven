@@ -11,7 +11,8 @@
   "client": [
     "client.SpectatorVisibilityCompatMixin",
     "client.PortalSceneCaptureMixin",
-    "client.RenderTypeMixin",
+    "client.RiftRenderPassMixin",
+    "client.RiftCameraMixin",
     "client.WorldRendererMixin",
     "client.TimeStopOwnerMixin",
     "client.TimeStopPacketId",

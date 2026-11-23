@@ -2,8 +2,8 @@ package com.inza.twoh.mixin.client;
 
 import com.inza.twoh.client.render.fx.RiftSceneColor;
 import com.mojang.blaze3d.matrix.MatrixStack;
-import com.qouteall.immersive_portals.render.RendererUsingFrameBuffer;
-import com.qouteall.immersive_portals.render.RendererUsingStencil;
+import com.inza.twoh.portalcore.immersive_portals.render.RendererUsingFrameBuffer;
+import com.inza.twoh.portalcore.immersive_portals.render.RendererUsingStencil;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;

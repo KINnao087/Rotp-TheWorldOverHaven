@@ -1,7 +1,7 @@
 package com.inza.twoh.client.render.fx;
 
 
-import com.qouteall.immersive_portals.render.context_management.PortalRendering;
+import com.inza.twoh.portalcore.immersive_portals.render.context_management.PortalRendering;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.World;
 import org.lwjgl.opengl.GL11;

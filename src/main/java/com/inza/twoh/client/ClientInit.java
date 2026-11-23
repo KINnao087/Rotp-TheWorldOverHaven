@@ -1,18 +1,16 @@
 package com.inza.twoh.client;
 
 import com.inza.twoh.AddonMain;
+import com.inza.twoh.portalcore.immersive_portals.ModMainClient;
 import com.inza.twoh.client.render.GroundMistEffect;
 import com.inza.twoh.client.render.fx.EffectRenderer;
 import com.inza.twoh.client.render.rift.SpatialRiftRenderer;
 import com.inza.twoh.init.InitEntities;
-import com.inza.twoh.client.render.OverHeavenRenderTypes;
 import com.inza.twoh.client.render.TheWorldOverHavenStandRenderer;
 import com.inza.twoh.init.InitDimension;
-import com.inza.twoh.init.InitBlock;
 import com.inza.twoh.init.InitStands;
-import com.qouteall.immersive_portals.render.PortalEntityRenderer;
+import com.inza.twoh.portalcore.immersive_portals.render.PortalEntityRenderer;
 
-import net.minecraft.client.renderer.RenderTypeLookup;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.client.registry.RenderingRegistry;
@@ -25,6 +23,7 @@ public class ClientInit {
     @SubscribeEvent
     public static void onFMLClientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
+            ModMainClient.init();
             EffectRenderer.registerReloadListener();
             EffectRenderer.registerDimension(InitDimension.OVER_HEAVEN, GroundMistEffect::new);
         });
@@ -33,6 +32,5 @@ public class ClientInit {
         RenderingRegistry.registerEntityRenderingHandler(InitEntities.SPATIAL_RIFT.get(), SpatialRiftRenderer::new);
         RenderingRegistry.registerEntityRenderingHandler(
                 InitStands.STAND_EXAMPLE_STAND.getEntityType(), TheWorldOverHavenStandRenderer::new);
-        RenderTypeLookup.setRenderLayer(InitBlock.OVER_HEAVEN_FLOOR.get(), OverHeavenRenderTypes::isOverHeavenFloor);
     }
 }

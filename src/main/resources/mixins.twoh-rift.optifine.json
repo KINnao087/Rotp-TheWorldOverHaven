@@ -1,0 +1,24 @@
+{
+  "required": true,
+  "package": "com.inza.twoh.portalcore.immersive_portals.optifine_compatibility.mixin_optifine",
+  "compatibilityLevel": "JAVA_8",
+  "refmap": "twoh-rift.refmap.json",
+  "mixins": [
+    "IEOFBuiltChunk",
+    "IEOFConfig",
+    "IEOFVboRegion",
+    "MixinConfig",
+    "MixinDynamicLights",
+    "MixinLightmapTextureManager",
+    "MixinShaders",
+    "MixinShaders_DimensionRedirect",
+    "MixinShaders_Swap",
+    "MixinShadersRender",
+    "MixinWorldUtils"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "minVersion": "0.8",
+  "client": []
+}

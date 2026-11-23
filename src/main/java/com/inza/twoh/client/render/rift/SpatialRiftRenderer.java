@@ -5,7 +5,7 @@ import com.inza.twoh.client.render.fx.EffectRenderer;
 import com.inza.twoh.client.render.fx.RiftSceneColor;
 import com.inza.twoh.entity.SpatialRiftEntity;
 import com.mojang.blaze3d.matrix.MatrixStack;
-import com.qouteall.immersive_portals.render.context_management.PortalRendering;
+import com.inza.twoh.portalcore.immersive_portals.render.context_management.PortalRendering;
 import net.minecraft.client.renderer.IRenderTypeBuffer;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererManager;

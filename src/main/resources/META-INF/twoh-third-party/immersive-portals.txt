@@ -1,0 +1,16 @@
+Immersive Portals for Forge by qouteall and contributors.
+Source: https://github.com/qouteall/ImmersivePortalsModForForge
+Revision: a37ac0d79f7c81e61cfa9248f94583f76d3a7b6a (1.16)
+License: Apache License, Version 2.0; see Apache-2.0.txt in this directory.
+
+Modified for TWOH: the rectangle triangulation and winding from
+portal/GeometryPortalShape.java are adapted in RiftAperture; the directed
+segment/plane intersection from portal/Portal.java is adapted in RiftCrossing.
+The adapted classes do not import the upstream runtime.
+
+TWOH also contains a relocated portion of the Forge 0.17 runtime (CurseForge file
+3562072). The classes in com.inza.twoh.portalcore are modified from upstream:
+private package/resource/channel names, TWOH lifecycle, no separate Forge mod,
+commands, peripheral mixins, alternate worlds or vanilla portal replacement.
+The Embeddium chunk listener adapter is specific to TWOH. Original copyright
+2020 qouteall. Apache-2.0.txt applies to the upstream-derived portions.

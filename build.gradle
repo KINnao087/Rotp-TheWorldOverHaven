@@ -36,6 +36,18 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 println('Java: ' + System.getProperty('java.version') + ' JVM: ' + System.getProperty('java.vm.version') + '(' + System.getProperty('java.vendor') + ') Arch: ' + System.getProperty('os.arch'))
+// The dev launcher must transform the embedded classes together with TWOH, not as a JVM library.
+configurations {
+    riftEngineMapped
+    compileOnly.extendsFrom(riftEngineMapped)
+}
+def stageRiftEngine = tasks.register('stageRiftEngine', Sync) {
+    from({ zipTree(configurations.riftEngineMapped.singleFile) }) { include '**/*.class' }
+    into layout.buildDirectory.dir('rift-engine/userdev')
+}
+sourceSets.create('riftEngineDev') {
+    output.classesDirs.from(files(stageRiftEngine))
+}
 minecraft {
     // The mappings can be changed at any time, and must be in the following format.
     // Channel:   Version:
@@ -74,6 +86,7 @@ minecraft {
             mods {
                 twohaddon {
                     source sourceSets.main
+                    source sourceSets.riftEngineDev
                 }
             }
         }
@@ -96,6 +109,7 @@ minecraft {
             mods {
                 twohaddon {
                     source sourceSets.main
+                    source sourceSets.riftEngineDev
                 }
             }
         }
@@ -121,6 +135,7 @@ minecraft {
             mods {
                 twohaddon {
                     source sourceSets.main
+                    source sourceSets.riftEngineDev
                 }
             }
         }
@@ -144,15 +159,15 @@ repositories {
         url 'https://raw.githubusercontent.com/StandoByte/RotP-maven/main'
     }
     flatDir {
-        dirs 'libs'
+        dirs 'libs', 'vendor/portal-core'
     }
 }
-
-apply from: 'gradle/immersive-portals-compat.gradle'
 
 mixin {
     add sourceSets.main, 'twohaddon.refmap.json'
     config 'mixins.twohaddon.json'
+    config 'mixins.twoh-rift.json'
+    config 'mixins.twoh-rift.forge.json'
 }
 
 dependencies {
@@ -180,13 +195,18 @@ dependencies {
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
 
     implementation fg.deobf("local:JJBA-RipplesOfThePast:${main_mod_version}")
-    implementation fg.deobf('local:immersive-portals-rotp-compat:0.17.1')
+    riftEngineMapped fg.deobf('local:twoh-rift-engine:1.1')
     compileOnly 'team.unnamed:mocha:3.0.0'
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
 // Example for how to get properties into the manifest for reading by the runtime..
+sourceSets {
+    embeddiumApi { java.srcDir 'vendor/portal-core/embeddium-api' }
+    main.compileClasspath += embeddiumApi.output
+}
 jar {
+    from(zipTree(file('vendor/portal-core/twoh-rift-engine-1.1.jar'))) { include '**/*.class' }
     manifest {
         attributes([
             "Specification-Title": "twohaddon",
@@ -196,7 +216,8 @@ jar {
             "Implementation-Version": "${version}",
             "Implementation-Vendor" :"Inza",
             "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
-            "MixinConfigs": "mixins.twohaddon.json"
+            "MixinConnector": "com.inza.twoh.portalcore.RiftMixinConnector",
+            "MixinConfigs": "mixins.twohaddon.json,mixins.twoh-rift.json,mixins.twoh-rift.forge.json"
         ])
     }
 }
@@ -204,6 +225,9 @@ jar {
 // Example configuration to allow publishing using the maven-publish task
 // This is the preferred method to reobfuscate your jar file
 jar.finalizedBy('reobfJar') 
+tasks.matching { it.name in ['prepareRuns', 'runClient', 'runServer', 'runData'] }.configureEach {
+    dependsOn stageRiftEngine
+}
 // However if you are in a multi-project build, dev time needs unobfed jar files, so you can delay the obfuscation until publishing by doing
 //publish.dependsOn('reobfJar')
 
