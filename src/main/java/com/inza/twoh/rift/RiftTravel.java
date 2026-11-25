@@ -2,6 +2,11 @@ package com.inza.twoh.rift;
 
 import com.inza.twoh.AddonMain;
 import com.inza.twoh.entity.SpatialRiftEntity;
+import com.inza.twoh.travel.PortalLandingSite;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.Pose;
 import net.minecraft.util.Direction;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
@@ -58,8 +63,7 @@ public final class RiftTravel {
         return null;
     }
 
-    /** EN: Ring cursor shared by the synchronous admin command and the tick-budgeted skill.
-     *  中文：管理命令和分 tick 查找的技能使用同一套逐圈搜索顺序。 */
+    /** Ring cursor for the legacy synchronous administrative lookup. */
     private static final class Columns {
         final BlockPos center;
         int ring, dx, dz;
@@ -97,24 +101,23 @@ public final class RiftTravel {
         private static final int TIMEOUT_TICKS = 600;
         private static final TicketType<UUID> LOAD = TicketType.create("twoh_rift_landing", UUID::compareTo, TIMEOUT_TICKS + 20);
         private final ServerWorld target;
-        private final Columns columns;
+        private final PortalLandingSite.Search search;
         private final UUID owner;
         private final Set<ChunkPos> tickets = new HashSet<>();
         private final long deadline;
         private long lastTick = Long.MIN_VALUE;
-        private Vector3d feet;
         private boolean finished;
         private boolean timedOut;
 
-        public LandingSearch(ServerWorld source, ServerWorld target, Vector3d near, UUID owner) {
+        public LandingSearch(ServerWorld source, ServerWorld target, Vector3d near, UUID owner,
+                             LivingEntity caster, Vector3d normal) {
             this.target = target;
             this.owner = owner;
-            columns = new Columns(new BlockPos(corresponding(source, target, near)), source == target ? SAME_WORLD_CLEARANCE : 0);
+            search = new PortalLandingSite.Search(target, corresponding(source, target, near), caster,
+                    source == target ? SAME_WORLD_CLEARANCE : 0, feet -> clearApproach(target, caster, normal, feet))
+                    .requireNaturalSupport(feet -> supportedExit(target, caster, feet.add(normal.scale(.75)))
+                            && supportedExit(target, caster, feet.subtract(normal.scale(.75))));
             deadline = source.getGameTime() + TIMEOUT_TICKS;
-        }
-
-        public boolean matches(ServerWorld source, Vector3d near) {
-            return columns.center.equals(new BlockPos(corresponding(source, target, near)));
         }
 
         public boolean poll(long tick) {
@@ -127,33 +130,17 @@ public final class RiftTravel {
                 finished = true;
                 return true;
             }
-            for (int i = 0; columns.hasNext() && i < COLUMNS_PER_TICK; i++, columns.advance()) {
-                BlockPos column = columns.current();
-                if (!target.getWorldBorder().isWithinBounds(column)) {
-                    continue;
-                }
-                ChunkPos pos = new ChunkPos(column);
-                Chunk chunk = target.getChunkSource().getChunkNow(pos.x, pos.z);
-                if (chunk == null) {
-                    if (tickets.add(pos)) {
-                        target.getChunkSource().addRegionTicket(LOAD, pos, 0, owner);
-                    }
-                    return false;
-                }
-                BlockPos landing = searchColumn(target, column, chunk);
-                if (landing != null) {
-                    feet = Vector3d.atBottomCenterOf(landing);
-                    finished = true;
-                    return true;
-                }
+            finished = search.advance(COLUMNS_PER_TICK);
+            ChunkPos missing = search.waitingFor();
+            if (!finished && missing != null && tickets.add(missing)) {
+                target.getChunkSource().addRegionTicket(LOAD, missing, 0, owner);
             }
-            finished = !columns.hasNext();
             return finished;
         }
 
         @Nullable
         public Vector3d feet() {
-            return feet;
+            return timedOut ? null : search.feet();
         }
 
         public boolean timedOut() {
@@ -161,13 +148,13 @@ public final class RiftTravel {
         }
 
         public boolean stillSafe() {
-            if (feet == null) {
-                return false;
-            }
-            BlockPos p = new BlockPos(feet);
-            ChunkPos chunk = new ChunkPos(p);
-            return target.getWorldBorder().isWithinBounds(p) && target.getChunkSource().getChunkNow(chunk.x, chunk.z) != null
-                    && safe(target, p);
+            return !timedOut && search.stillValid();
+        }
+
+        /** A pen preview or cancelled stroke must never place blocks. */
+        @Nullable
+        public Vector3d commit(LivingEntity caster) {
+            return finished && !timedOut ? search.commit(caster) : null;
         }
 
         @Override
@@ -177,6 +164,33 @@ public final class RiftTravel {
             }
             tickets.clear();
         }
+    }
+
+    /** Both faces of the vertical aperture are usable. Allow room for one step through its midpoint. */
+    private static boolean clearApproach(ServerWorld world, LivingEntity caster, Vector3d normal, Vector3d feet) {
+        AxisAlignedBB body = caster.getBoundingBox().move(feet.subtract(caster.position()))
+                .minmax(caster.getDimensions(Pose.STANDING).makeBoundingBox(feet));
+        Vector3d step = normal.scale(.75);
+        AxisAlignedBB aisle = body.move(step).minmax(body.move(step.scale(-1)));
+        if (aisle.minX < world.getWorldBorder().getMinX() || aisle.maxX > world.getWorldBorder().getMaxX()
+                || aisle.minZ < world.getWorldBorder().getMinZ() || aisle.maxZ > world.getWorldBorder().getMaxZ()
+                || !world.noCollision(aisle) || world.containsAnyLiquid(aisle)) return false;
+        for (BlockPos p : BlockPos.betweenClosed(new BlockPos(aisle.minX, aisle.minY, aisle.minZ),
+                new BlockPos(Math.nextDown(aisle.maxX), Math.nextDown(aisle.maxY), Math.nextDown(aisle.maxZ)))) {
+            BlockState state = world.getBlockState(p);
+            if (caster.getType().isBlockDangerous(state) || state.is(Blocks.NETHER_PORTAL)
+                    || state.is(Blocks.END_PORTAL) || state.is(Blocks.END_GATEWAY)) return false;
+        }
+        return world.getEntitiesOfClass(SpatialRiftEntity.class, aisle.inflate(8)).isEmpty();
+    }
+
+    private static boolean supportedExit(ServerWorld world, LivingEntity caster, Vector3d step) {
+        final double contact = 1.E-5;
+        BlockPos floor = new BlockPos(step.x, step.y - contact, step.z);
+        if (caster.getType().isBlockDangerous(world.getBlockState(floor))) return false;
+        AxisAlignedBB contactPatch = new AxisAlignedBB(step.x - contact, step.y - contact, step.z - contact,
+                step.x + contact, step.y, step.z + contact);
+        return world.getBlockCollisions(null, contactPatch).anyMatch(shape -> !shape.isEmpty());
     }
 
     @Nullable

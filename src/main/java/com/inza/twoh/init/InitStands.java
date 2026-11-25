@@ -13,6 +13,7 @@ import com.inza.twoh.action.TWOHBarrage;
 import com.inza.twoh.action.TWOHBlock;
 import com.inza.twoh.action.TWOHFinisherPunch;
 import com.inza.twoh.action.TWOHHeavyPunch;
+import com.inza.twoh.action.TWOHHeavenAscension;
 import com.inza.twoh.action.TWOHLightPunch;
 import com.inza.twoh.action.TWOHSpatialRift;
 import com.github.standobyte.jojo.entity.stand.StandPose;
@@ -63,6 +64,9 @@ public class InitStands {
                     .standPose(StandPose.RANGED_ATTACK)
                     .holdToFire(1, true)
                     .partsRequired(StandPart.ARMS)));
+
+    public static final RegistryObject<TWOHHeavenAscension> TWOH_HEAVEN_ASCENSION = ACTIONS.register(
+            "twoh_heaven_ascension", () -> new TWOHHeavenAscension(new TWOHHeavenAscension.Builder()));
     
 
     // ...then create the Stand type instance. Moves, stats, entity sizes, and a few other things are determined here.
@@ -79,7 +83,8 @@ public class InitStands {
                     .rightClickHotbar(
                             TWOH_STAND_BLOCK.get(),
                             TWOH_SPATIAL_RIFT.get(),
-                            ModStandsInit.THE_WORLD_TIME_STOP.get()
+                            ModStandsInit.THE_WORLD_TIME_STOP.get(),
+                            TWOH_HEAVEN_ASCENSION.get()
                             )
                     .defaultStats(StandStats.class, new StandStats.Builder()
                             .tier(6)

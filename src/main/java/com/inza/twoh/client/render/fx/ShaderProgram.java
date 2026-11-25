@@ -5,12 +5,15 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.resources.IResource;
 import net.minecraft.resources.IResourceManager;
 import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.math.vector.Matrix4f;
 import org.apache.commons.io.IOUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
+import org.lwjgl.system.MemoryStack;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.FloatBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -22,13 +25,19 @@ public final class ShaderProgram implements AutoCloseable {
     private static volatile long resourceVersion;
     private final ResourceLocation vertex;
     private final ResourceLocation fragment;
+    private final ResourceLocation fragmentPrelude;
     private final Map<String, Integer> uniforms = new HashMap<>();
     private long loadedVersion = -1;
     private int program;
 
     public ShaderProgram(ResourceLocation vertex, ResourceLocation fragment) {
+        this(vertex, fragment, null);
+    }
+
+    public ShaderProgram(ResourceLocation vertex, ResourceLocation fragment, ResourceLocation fragmentPrelude) {
         this.vertex = vertex;
         this.fragment = fragment;
+        this.fragmentPrelude = fragmentPrelude;
     }
 
     static void invalidateResources() {
@@ -60,6 +69,14 @@ public final class ShaderProgram implements AutoCloseable {
         GL20.glUniform3f(location(name), x, y, z);
     }
 
+    public void setMatrix(String name, Matrix4f value) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            FloatBuffer buffer = stack.mallocFloat(16);
+            value.store(buffer);
+            GL20.glUniformMatrix4fv(location(name), false, buffer);
+        }
+    }
+
     private int location(String name) {
         return uniforms.computeIfAbsent(name, key -> GL20.glGetUniformLocation(program, key));
     }
@@ -70,11 +87,11 @@ public final class ShaderProgram implements AutoCloseable {
         int fs = 0;
         int candidate = 0;
         try {
-            vs = compile(resources, GL20.GL_VERTEX_SHADER, vertex);
+            vs = compile(resources, GL20.GL_VERTEX_SHADER, vertex, null);
             if (vs == 0) {
                 return;
             }
-            fs = compile(resources, GL20.GL_FRAGMENT_SHADER, fragment);
+            fs = compile(resources, GL20.GL_FRAGMENT_SHADER, fragment, fragmentPrelude);
             if (fs == 0) {
                 return;
             }
@@ -110,10 +127,17 @@ public final class ShaderProgram implements AutoCloseable {
         }
     }
 
-    private static int compile(IResourceManager resources, int type, ResourceLocation path) throws IOException {
-        String source;
+    private static String read(IResourceManager resources, ResourceLocation path) throws IOException {
         try (IResource resource = resources.getResource(path)) {
-            source = IOUtils.toString(resource.getInputStream(), StandardCharsets.UTF_8);
+            return IOUtils.toString(resource.getInputStream(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static int compile(IResourceManager resources, int type, ResourceLocation path, ResourceLocation prelude) throws IOException {
+        String source = read(resources, path);
+        if (prelude != null) {
+            int firstLine = source.indexOf('\n') + 1;
+            source = source.substring(0, firstLine) + read(resources, prelude) + "\n#line 2\n" + source.substring(firstLine);
         }
         int shader = GL20.glCreateShader(type);
         GL20.glShaderSource(shader, source);

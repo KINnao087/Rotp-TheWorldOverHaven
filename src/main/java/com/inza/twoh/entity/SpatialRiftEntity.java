@@ -109,7 +109,7 @@ public final class SpatialRiftEntity extends Entity implements IEntityAdditional
         draft.stroke = pen;
         draft.entityData.set(TRACE, pen.pack());
         draft.landingOrigin = user.position();
-        draft.landing = new LandingSearch(world, destination, draft.landingOrigin, draft.getUUID());
+        draft.landing = new LandingSearch(world, destination, draft.landingOrigin, draft.getUUID(), user, pen.plane.inward);
         draft.peerWorld = destination.dimension();
         draft.caster = user.getUUID();
         draft.lastSample = world.getGameTime();
@@ -164,7 +164,7 @@ public final class SpatialRiftEntity extends Entity implements IEntityAdditional
         draft.entityData.set(TRACE, draft.stroke.pack());
         if (draft.safeFeet != null && !draft.landing.stillSafe()) {
             draft.landing.close();
-            draft.landing = new LandingSearch(world, destination, draft.landingOrigin, draft.getUUID());
+            draft.landing = new LandingSearch(world, destination, draft.landingOrigin, draft.getUUID(), user, draft.stroke.plane.inward);
             draft.safeFeet = null;
             if (draft.windows != null) {
                 draft.windows.close();
@@ -198,7 +198,9 @@ public final class SpatialRiftEntity extends Entity implements IEntityAdditional
             discardDraft(user);
         } else if (released) {
             try {
-                open(world, user, stroke, destination, safeFeet);
+                Vector3d arrival = landing.commit(user);
+                if (arrival != null) open(world, user, stroke, destination, arrival);
+                else user.sendMessage(new TranslationTextComponent("rift.twohaddon.no_landing"), user.getUUID());
             } finally {
                 discardDraft(user);
             }

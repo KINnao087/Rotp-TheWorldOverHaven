@@ -1,6 +1,9 @@
 package com.inza.twoh.mixin.client;
 
 import com.inza.twoh.client.render.FloorSurface;
+import com.inza.twoh.client.render.ascension.AscensionTransition;
+import net.minecraft.client.renderer.IRenderTypeBuffer;
+import net.minecraft.entity.Entity;
 import com.inza.twoh.init.InitBlock;
 import net.minecraft.block.BlockState;
 import net.minecraft.util.math.BlockPos;
@@ -15,10 +18,17 @@ import net.minecraft.util.math.vector.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(WorldRenderer.class)
 public abstract class WorldRendererMixin {
+    // Buffer routing only: vanilla still performs visibility, pose, lighting and model/layer callbacks once.
+    @ModifyVariable(method = "renderEntity", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+    private IRenderTypeBuffer twohaddon$routePassenger(IRenderTypeBuffer original, Entity entity, double x, double y,
+            double z, float partialTick, MatrixStack pose, IRenderTypeBuffer buffers) {
+        return AscensionTransition.passengerBuffer(entity, original);
+    }
     @Inject(method = "setBlockDirty(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;Lnet/minecraft/block/BlockState;)V", at = @At("HEAD"))
     private void twohaddon$floorChanged(BlockPos pos, BlockState before, BlockState after, CallbackInfo ci) {
         if (before.is(InitBlock.OVER_HEAVEN_FLOOR.get()) || after.is(InitBlock.OVER_HEAVEN_FLOOR.get())) {

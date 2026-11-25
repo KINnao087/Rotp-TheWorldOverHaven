@@ -1,4 +1,8 @@
 {
+  "action.twohaddon.twoh_heaven_ascension": "Heaven Ascension",
+  "ascension.twohaddon.empty": "No eligible living targets within 8 blocks. Sneak and cast to travel yourself.",
+  "ascension.twohaddon.no_return": "No point of departure is recorded for this return trip.",
+  "ascension.twohaddon.not_ready": "The destination did not load in time. You stayed in this dimension.",
   "block.twohaddon.over_heaven_floor": "Over Heaven Floor",
   "action.twohaddon.twoh_spatial_rift": "Spatial Rift",
   "entity.twohaddon.spatial_rift": "Spatial Rift",

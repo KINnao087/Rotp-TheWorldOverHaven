@@ -13,7 +13,7 @@ import net.minecraftforge.fml.network.simple.SimpleChannel;
 import java.util.Optional;
 
 public final class RealityMarkNetwork {
-    private static final String PROTOCOL_VERSION = "3";
+    private static final String PROTOCOL_VERSION = "5";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(AddonMain.MOD_ID, "main"),
@@ -40,6 +40,7 @@ public final class RealityMarkNetwork {
 
         CHANNEL.registerMessage(nextPacketId(), CastVisualPacket.class, CastVisualPacket::write,
                 CastVisualPacket::read, CastVisualPacket::receive, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        AscensionNetwork.register(CHANNEL, nextPacketId(), nextPacketId(), nextPacketId());
         registered = true;
     }
 

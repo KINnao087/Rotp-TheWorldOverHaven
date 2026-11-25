@@ -11,5 +11,5 @@
   "ambient_light": 0.18,
   "logical_height": 256,
   "infiniburn": "minecraft:infiniburn_overworld",
-  "effects": "minecraft:the_end"
+  "effects": "twohaddon:over_heaven"
 }

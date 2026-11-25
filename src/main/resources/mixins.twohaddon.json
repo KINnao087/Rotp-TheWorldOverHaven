@@ -9,6 +9,7 @@
     "TimeStopVisualSyncMixin"
   ],
   "client": [
+    "client.DimensionEffectsRegistry",
     "client.SpectatorVisibilityCompatMixin",
     "client.PortalSceneCaptureMixin",
     "client.RiftRenderPassMixin",

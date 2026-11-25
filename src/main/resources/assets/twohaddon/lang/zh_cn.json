@@ -1,4 +1,8 @@
 {
+  "action.twohaddon.twoh_heaven_ascension": "天堂迁跃",
+  "ascension.twohaddon.empty": "8 格内没有可迁跃的生物。潜行施放可让自己一同前往。",
+  "ascension.twohaddon.no_return": "没有这次返程的出发点记录。",
+  "ascension.twohaddon.not_ready": "目的地区块未能及时就绪，你仍留在原维度。",
   "action.twohaddon.twoh_spatial_rift": "时空裂隙",
   "entity.twohaddon.spatial_rift": "时空裂隙",
   "rift.twohaddon.select_title": "选择裂隙目的地",

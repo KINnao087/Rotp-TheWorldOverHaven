@@ -3,6 +3,7 @@ package com.inza.twoh.client;
 import com.inza.twoh.AddonMain;
 import com.inza.twoh.portalcore.immersive_portals.ModMainClient;
 import com.inza.twoh.client.render.GroundMistEffect;
+import com.inza.twoh.client.render.heaven.HeavenSky;
 import com.inza.twoh.client.render.fx.EffectRenderer;
 import com.inza.twoh.client.render.rift.SpatialRiftRenderer;
 import com.inza.twoh.init.InitEntities;
@@ -25,6 +26,7 @@ public class ClientInit {
         event.enqueueWork(() -> {
             ModMainClient.init();
             EffectRenderer.registerReloadListener();
+            HeavenSky.register();
             EffectRenderer.registerDimension(InitDimension.OVER_HEAVEN, GroundMistEffect::new);
         });
         RenderingRegistry.registerEntityRenderingHandler(InitEntities.RIFT_WINDOW.get(),
